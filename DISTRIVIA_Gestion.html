@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DISTRIVIA Gestion</title>
+<style>
+  :root{
+    --bleu:#0F2A4A; --bleu2:#1B3D63; --terra:#C85E2D; --creme:#F5F1E8;
+    --anthra:#1A1A1A; --gris:#888880; --blanc:#FFFFFF; --vert:#2E6B3E; --rouge:#A33B3B;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font-family:'Segoe UI', system-ui, -apple-system, sans-serif; background:var(--creme); color:var(--anthra); font-size:15px;}
+  header{background:var(--bleu); padding:14px 18px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;}
+  .brand{display:flex; flex-direction:column;}
+  .wordmark{color:#fff; font-weight:800; letter-spacing:6px; font-size:20px;}
+  .bar{width:70px; height:3px; background:var(--terra); margin:4px 0;}
+  .sub{color:#C9D4E2; font-size:9px; letter-spacing:3px;}
+  .htitle{color:var(--creme); font-size:13px; font-style:italic;}
+  nav{display:flex; background:var(--bleu2); overflow-x:auto;}
+  nav button{flex:1; min-width:92px; padding:11px 6px; background:none; border:none; color:#C9D4E2; font-weight:600; font-size:13px; cursor:pointer; border-bottom:3px solid transparent; white-space:nowrap;}
+  nav button.active{color:#fff; border-bottom-color:var(--terra); background:rgba(255,255,255,.05);}
+  main{max-width:1080px; margin:0 auto; padding:16px;}
+  h2{color:var(--bleu); font-size:19px; margin:6px 0 12px;}
+  h3{color:var(--terra); font-size:14px; margin:14px 0 8px; text-transform:uppercase; letter-spacing:1px;}
+  .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:16px;}
+  .card{background:#fff; border-radius:10px; padding:14px; box-shadow:0 1px 4px rgba(15,42,74,.10);}
+  .card .v{font-size:21px; font-weight:800; color:var(--bleu);}
+  .card .l{font-size:11.5px; color:var(--gris); margin-top:2px;}
+  .card.t .v{color:var(--terra);}
+  .card.g .v{color:var(--vert);}
+  .card.r .v{color:var(--rouge);}
+  .panel{background:#fff; border-radius:10px; padding:14px; box-shadow:0 1px 4px rgba(15,42,74,.10); margin-bottom:14px;}
+  table{width:100%; border-collapse:collapse; font-size:13.5px;}
+  th{background:var(--bleu); color:#fff; text-align:left; padding:8px; font-size:11px; letter-spacing:.5px; text-transform:uppercase;}
+  td{padding:8px; border-bottom:1px solid #EDE7DA; vertical-align:middle;}
+  tr:nth-child(even) td{background:#FAF7F0;}
+  .num{text-align:right; font-variant-numeric:tabular-nums;}
+  .btn{background:var(--terra); color:#fff; border:none; border-radius:7px; padding:9px 14px; font-weight:700; cursor:pointer; font-size:13.5px;}
+  .btn.b{background:var(--bleu);}
+  .btn.ghost{background:#EDE7DA; color:var(--bleu);}
+  .btn.sm{padding:5px 9px; font-size:12px;}
+  .btn:disabled{opacity:.45; cursor:not-allowed;}
+  .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+  .grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px;}
+  label{display:block; font-size:11.5px; font-weight:700; color:var(--bleu); margin:8px 0 3px; text-transform:uppercase; letter-spacing:.5px;}
+  input,select,textarea{width:100%; padding:9px; border:1.5px solid #D8D2C4; border-radius:7px; font-size:14px; background:#fff;}
+  input:focus,select:focus{outline:none; border-color:var(--terra);}
+  .badge{display:inline-block; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:700; color:#fff;}
+  .badge.pending{background:var(--gris);} .badge.delivered{background:var(--bleu);} .badge.paid{background:var(--vert);}
+  .badge.alert{background:var(--rouge);} .badge.ok{background:var(--vert);} .badge.credit{background:var(--terra);}
+  .alertbox{background:#FCEFE7; border-left:4px solid var(--terra); padding:10px 12px; border-radius:6px; margin-bottom:10px; font-size:13.5px;}
+  .empty{color:var(--gris); font-style:italic; padding:14px; text-align:center;}
+  .lines .ln{display:grid; grid-template-columns:1fr 84px 110px 34px; gap:6px; margin-bottom:6px; align-items:center;}
+  .del{background:none; border:none; color:var(--rouge); font-size:17px; cursor:pointer;}
+  .total{font-size:17px; font-weight:800; color:var(--bleu); text-align:right; margin-top:8px;}
+  .muted{color:var(--gris); font-size:12px;}
+  .tablewrap{overflow-x:auto;}
+  #toast{position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--bleu); color:#fff; padding:11px 18px; border-radius:8px; font-weight:600; display:none; z-index:50; box-shadow:0 4px 14px rgba(0,0,0,.25);}
+  @media(max-width:560px){ .lines .ln{grid-template-columns:1fr 64px 88px 30px;} main{padding:10px;} }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="wordmark">DISTRIVIA</div>
+    <div class="bar"></div>
+    <div class="sub">DISTRIBUTION GROUP</div>
+  </div>
+  <div class="htitle">Gestion · stock · clients · commandes · caisse</div>
+</header>
+<nav>
+  <button data-tab="dash" class="active">Tableau de bord</button>
+  <button data-tab="orders">Commandes</button>
+  <button data-tab="clients">Clients</button>
+  <button data-tab="products">Produits & Stock</button>
+  <button data-tab="cash">Caisse</button>
+  <button data-tab="backup">Sauvegarde</button>
+</nav>
+<main id="app"><div class="empty">Chargement des données…</div></main>
+<div id="toast"></div>
+
+<script>
+const FAMILIES = ["Restauration & take-away","Hygiène & entretien","Médical","Événementiel","Écologique"];
+const CLIENT_TYPES = ["Dibiterie / gargote","Restaurant / fast-food","Traiteur / événementiel","Boulangerie","Boutique revendeuse","Clinique / pharmacie","Hôtel","Entreprise / école","Autre"];
+const KEY = "distrivia-erp-v1";
+let S = { products:[], clients:[], orders:[], expenses:[], seq:1 };
+let tab = "dash";
+let draft = null; // brouillon de commande
+
+const fmt = n => (Math.round(n)||0).toLocaleString("fr-FR") + " F";
+const today = () => new Date().toISOString().slice(0,10);
+const monthKey = d => (d||today()).slice(0,7);
+const el = id => document.getElementById(id);
+const esc = s => String(s??"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function toast(msg){ const t = el("toast"); t.textContent = msg; t.style.display = "block"; setTimeout(()=>t.style.display="none", 2200); }
+
+async function load(){
+  try{ const r = await window.storage.get(KEY); if(r && r.value) S = JSON.parse(r.value); }
+  catch(e){ /* première utilisation : pas de données */ }
+  render();
+}
+async function save(){
+  try{ await window.storage.set(KEY, JSON.stringify(S)); }
+  catch(e){ toast("⚠ Échec de la sauvegarde — exportez vos données"); }
+}
+function nid(){ return S.seq++; }
+
+// ---------- Calculs ----------
+function orderTotal(o){ return o.lines.reduce((a,l)=>a+l.qty*l.price,0); }
+function orderCost(o){ return o.lines.reduce((a,l)=>{ const p=S.products.find(p=>p.id===l.productId); return a+l.qty*(p?p.cost:0); },0); }
+function clientName(id){ const c=S.clients.find(c=>c.id===id); return c?c.name:"—"; }
+function prodName(id){ const p=S.products.find(p=>p.id===id); return p?p.name:"—"; }
+function kpis(){
+  const m = monthKey();
+  const delivered = S.orders.filter(o=>o.status!=="pending");
+  const caMonth = delivered.filter(o=>monthKey(o.date)===m).reduce((a,o)=>a+orderTotal(o),0);
+  const margeMonth = delivered.filter(o=>monthKey(o.date)===m).reduce((a,o)=>a+orderTotal(o)-orderCost(o),0);
+  const encMonth = S.orders.filter(o=>o.status==="paid" && monthKey(o.paidDate||o.date)===m).reduce((a,o)=>a+orderTotal(o),0);
+  const credit = S.orders.filter(o=>o.status==="delivered").reduce((a,o)=>a+orderTotal(o),0);
+  const activeClients = new Set(S.orders.filter(o=>monthKey(o.date)===m).map(o=>o.clientId)).size;
+  const alerts = S.products.filter(p=>p.stock<=p.alert);
+  const cashIn = S.orders.filter(o=>o.status==="paid").reduce((a,o)=>a+orderTotal(o),0);
+  const cashOut = S.expenses.reduce((a,e)=>a+e.amount,0);
+  return {caMonth, margeMonth, encMonth, credit, activeClients, alerts, solde:cashIn-cashOut};
+}
+
+// ---------- Rendu ----------
+function render(){
+  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("active", b.dataset.tab===tab));
+  const v = {dash:vDash, orders:vOrders, clients:vClients, products:vProducts, cash:vCash, backup:vBackup}[tab];
+  el("app").innerHTML = v();
+  bind();
+}
+
+function vDash(){
+  const k = kpis();
+  const pending = S.orders.filter(o=>o.status==="pending");
+  const creditOrders = S.orders.filter(o=>o.status==="delivered");
+  return `
+  <h2>Tableau de bord — ${new Date().toLocaleDateString("fr-FR",{month:"long",year:"numeric"})}</h2>
+  <div class="cards">
+    <div class="card"><div class="v">${fmt(k.caMonth)}</div><div class="l">Chiffre d'affaires du mois (livré)</div></div>
+    <div class="card g"><div class="v">${fmt(k.margeMonth)}</div><div class="l">Marge brute du mois</div></div>
+    <div class="card"><div class="v">${fmt(k.encMonth)}</div><div class="l">Encaissé ce mois</div></div>
+    <div class="card t"><div class="v">${fmt(k.credit)}</div><div class="l">Crédit client en cours (livré, non payé)</div></div>
+    <div class="card"><div class="v">${k.activeClients}</div><div class="l">Clients actifs ce mois</div></div>
+    <div class="card ${k.solde<0?'r':'g'}"><div class="v">${fmt(k.solde)}</div><div class="l">Solde de caisse</div></div>
+  </div>
+  ${k.alerts.length?`<div class="alertbox"><b>⚠ Stock bas :</b> ${k.alerts.map(p=>esc(p.name)+" ("+p.stock+" restants)").join(" · ")} — pensez au réassort (délai import : 2 à 3 mois).</div>`:""}
+  ${creditOrders.length?`<div class="panel"><h3>À encaisser (${creditOrders.length})</h3><div class="tablewrap"><table><tr><th>Date</th><th>Client</th><th class="num">Montant</th><th></th></tr>
+    ${creditOrders.map(o=>`<tr><td>${o.date}</td><td>${esc(clientName(o.clientId))}</td><td class="num">${fmt(orderTotal(o))}</td><td><button class="btn sm" data-pay="${o.id}">Encaisser</button></td></tr>`).join("")}
+  </table></div></div>`:""}
+  ${pending.length?`<div class="panel"><h3>Commandes à livrer (${pending.length})</h3><div class="tablewrap"><table><tr><th>Date</th><th>Client</th><th class="num">Montant</th><th></th></tr>
+    ${pending.map(o=>`<tr><td>${o.date}</td><td>${esc(clientName(o.clientId))}</td><td class="num">${fmt(orderTotal(o))}</td><td><button class="btn sm b" data-deliver="${o.id}">Livrer</button></td></tr>`).join("")}
+  </table></div></div>`:""}
+  ${!S.products.length?`<div class="panel"><h3>Démarrage</h3><p>Bienvenue ! Commencez par créer vos produits (onglet <b>Produits & Stock</b>), puis vos clients, puis votre première commande. Vos données sont sauvegardées automatiquement.</p></div>`:""}`;
+}
+
+function vProducts(){
+  return `
+  <h2>Produits & Stock</h2>
+  <div class="panel">
+    <h3>Ajouter / réceptionner</h3>
+    <div class="grid2">
+      <div><label>Nom du produit</label><input id="p-name" placeholder="Ex. Boîte kraft 1000 ml (carton de 300)"></div>
+      <div><label>Famille</label><select id="p-fam">${FAMILIES.map(f=>`<option>${f}</option>`).join("")}</select></div>
+      <div><label>Coût de revient / carton (FCFA)</label><input id="p-cost" type="number" min="0" placeholder="9500"></div>
+      <div><label>Prix de vente / carton (FCFA)</label><input id="p-price" type="number" min="0" placeholder="12500"></div>
+      <div><label>Stock initial (cartons)</label><input id="p-stock" type="number" min="0" value="0"></div>
+      <div><label>Seuil d'alerte (cartons)</label><input id="p-alert" type="number" min="0" value="20"></div>
+    </div>
+    <div class="row" style="margin-top:10px"><button class="btn" id="p-add">Ajouter le produit</button>
+    <span class="muted">Coût de revient = rendu entrepôt Dakar (achat + fret + douane), depuis votre kit fournisseurs.</span></div>
+  </div>
+  <div class="panel"><div class="tablewrap"><table>
+    <tr><th>Produit</th><th>Famille</th><th class="num">Coût</th><th class="num">Prix</th><th class="num">Marge</th><th class="num">Stock</th><th>État</th><th>Réception</th><th></th></tr>
+    ${S.products.length? S.products.map(p=>{
+      const mg = p.price? Math.round((p.price-p.cost)/p.price*100):0;
+      return `<tr><td><b>${esc(p.name)}</b></td><td class="muted">${esc(p.family)}</td>
+      <td class="num">${fmt(p.cost)}</td><td class="num">${fmt(p.price)}</td><td class="num">${mg} %</td>
+      <td class="num"><b>${p.stock}</b></td>
+      <td>${p.stock<=p.alert?'<span class="badge alert">BAS</span>':'<span class="badge ok">OK</span>'}</td>
+      <td><div class="row"><input type="number" min="1" style="width:64px" id="rcv-${p.id}" placeholder="qté"><button class="btn sm b" data-rcv="${p.id}">+ Stock</button></div></td>
+      <td><button class="del" data-delp="${p.id}" title="Supprimer">✕</button></td></tr>`;
+    }).join("") : `<tr><td colspan="9" class="empty">Aucun produit. Ajoutez vos références de lancement ci-dessus.</td></tr>`}
+  </table></div></div>`;
+}
+
+function vClients(){
+  return `
+  <h2>Clients</h2>
+  <div class="panel">
+    <h3>Nouveau client</h3>
+    <div class="grid2">
+      <div><label>Nom / établissement</label><input id="c-name" placeholder="Ex. Dibiterie Chez Modou"></div>
+      <div><label>Type</label><select id="c-type">${CLIENT_TYPES.map(t=>`<option>${t}</option>`).join("")}</select></div>
+      <div><label>Zone / quartier</label><input id="c-zone" placeholder="Ex. Pikine"></div>
+      <div><label>Téléphone (WhatsApp)</label><input id="c-phone" placeholder="+221 77 ..."></div>
+    </div>
+    <div class="row" style="margin-top:10px"><button class="btn" id="c-add">Ajouter le client</button></div>
+  </div>
+  <div class="panel"><div class="tablewrap"><table>
+    <tr><th>Client</th><th>Type</th><th>Zone</th><th>Téléphone</th><th class="num">CA total</th><th class="num">Crédit en cours</th><th></th></tr>
+    ${S.clients.length? S.clients.map(c=>{
+      const co = S.orders.filter(o=>o.clientId===c.id);
+      const ca = co.filter(o=>o.status!=="pending").reduce((a,o)=>a+orderTotal(o),0);
+      const cr = co.filter(o=>o.status==="delivered").reduce((a,o)=>a+orderTotal(o),0);
+      return `<tr><td><b>${esc(c.name)}</b></td><td class="muted">${esc(c.type)}</td><td>${esc(c.zone)}</td><td>${esc(c.phone)}</td>
+      <td class="num">${fmt(ca)}</td><td class="num">${cr?'<span class="badge credit">'+fmt(cr)+'</span>':'—'}</td>
+      <td><button class="del" data-delc="${c.id}" title="Supprimer">✕</button></td></tr>`;
+    }).join("") : `<tr><td colspan="7" class="empty">Aucun client. Vos 100 clients cibles commencent ici.</td></tr>`}
+  </table></div></div>`;
+}
+
+function vOrders(){
+  if(!S.products.length || !S.clients.length){
+    return `<h2>Commandes</h2><div class="panel"><p class="empty">Créez d'abord au moins un produit et un client pour enregistrer une commande.</p></div>`;
+  }
+  if(!draft) draft = { clientId:S.clients[0].id, date:today(), payMode:"comptant", lines:[] };
+  const total = draft.lines.reduce((a,l)=>a+l.qty*l.price,0);
+  return `
+  <h2>Commandes</h2>
+  <div class="panel">
+    <h3>Nouvelle commande</h3>
+    <div class="grid2">
+      <div><label>Client</label><select id="o-client">${S.clients.map(c=>`<option value="${c.id}" ${c.id==draft.clientId?"selected":""}>${esc(c.name)}</option>`).join("")}</select></div>
+      <div><label>Date</label><input id="o-date" type="date" value="${draft.date}"></div>
+      <div><label>Paiement</label><select id="o-pay"><option value="comptant" ${draft.payMode==="comptant"?"selected":""}>Comptant à la livraison</option><option value="credit" ${draft.payMode==="credit"?"selected":""}>Crédit (15–30 j)</option></select></div>
+    </div>
+    <h3>Lignes</h3>
+    <div class="lines">
+      ${draft.lines.map((l,i)=>`<div class="ln">
+        <select data-lprod="${i}">${S.products.map(p=>`<option value="${p.id}" ${p.id==l.productId?"selected":""}>${esc(p.name)} (stock ${p.stock})</option>`).join("")}</select>
+        <input type="number" min="1" value="${l.qty}" data-lqty="${i}">
+        <input type="number" min="0" value="${l.price}" data-lprice="${i}">
+        <button class="del" data-lrm="${i}">✕</button>
+      </div>`).join("")}
+    </div>
+    <div class="row"><button class="btn ghost" id="o-addline">+ Ajouter une ligne</button></div>
+    <div class="total">Total : ${fmt(total)}</div>
+    <div class="row" style="margin-top:8px"><button class="btn" id="o-save" ${draft.lines.length?"":"disabled"}>Enregistrer la commande</button>
+    <span class="muted">Le stock est décompté à la livraison, pas à la commande.</span></div>
+  </div>
+  <div class="panel"><h3>Historique</h3><div class="tablewrap"><table>
+    <tr><th>Date</th><th>Client</th><th>Détail</th><th class="num">Total</th><th>Paiement</th><th>Statut</th><th>Action</th></tr>
+    ${S.orders.length? [...S.orders].sort((a,b)=>b.id-a.id).map(o=>`<tr>
+      <td>${o.date}</td><td><b>${esc(clientName(o.clientId))}</b></td>
+      <td class="muted">${o.lines.map(l=>l.qty+"× "+esc(prodName(l.productId))).join(", ")}</td>
+      <td class="num">${fmt(orderTotal(o))}</td>
+      <td class="muted">${o.payMode==="credit"?"Crédit":"Comptant"}</td>
+      <td>${o.status==="pending"?'<span class="badge pending">À livrer</span>':o.status==="delivered"?'<span class="badge delivered">Livrée · à encaisser</span>':'<span class="badge paid">Payée</span>'}</td>
+      <td>${o.status==="pending"?`<button class="btn sm b" data-deliver="${o.id}">Livrer</button>`:o.status==="delivered"?`<button class="btn sm" data-pay="${o.id}">Encaisser</button>`:(o.paidDate||"")}</td>
+    </tr>`).join("") : `<tr><td colspan="7" class="empty">Aucune commande pour l'instant.</td></tr>`}
+  </table></div></div>`;
+}
+
+function vCash(){
+  const ins = S.orders.filter(o=>o.status==="paid").map(o=>({date:o.paidDate||o.date, label:"Encaissement — "+clientName(o.clientId), amount:orderTotal(o), in:true}));
+  const outs = S.expenses.map(e=>({date:e.date, label:e.label+" ("+e.category+")", amount:e.amount, in:false, id:e.id}));
+  const all = [...ins, ...outs].sort((a,b)=> (a.date<b.date?1:-1));
+  const solde = ins.reduce((a,x)=>a+x.amount,0) - outs.reduce((a,x)=>a+x.amount,0);
+  return `
+  <h2>Caisse</h2>
+  <div class="cards">
+    <div class="card g"><div class="v">${fmt(ins.reduce((a,x)=>a+x.amount,0))}</div><div class="l">Total encaissé</div></div>
+    <div class="card r"><div class="v">${fmt(outs.reduce((a,x)=>a+x.amount,0))}</div><div class="l">Total dépensé</div></div>
+    <div class="card ${solde<0?'r':''}"><div class="v">${fmt(solde)}</div><div class="l">Solde de caisse</div></div>
+  </div>
+  <div class="panel">
+    <h3>Enregistrer une dépense</h3>
+    <div class="grid2">
+      <div><label>Libellé</label><input id="e-label" placeholder="Ex. Loyer entrepôt juin"></div>
+      <div><label>Catégorie</label><select id="e-cat"><option>Loyer</option><option>Salaires</option><option>Transport / carburant</option><option>Achat marchandise</option><option>Douane / transit</option><option>Marketing</option><option>Administratif</option><option>Autre</option></select></div>
+      <div><label>Montant (FCFA)</label><input id="e-amount" type="number" min="0"></div>
+      <div><label>Date</label><input id="e-date" type="date" value="${today()}"></div>
+    </div>
+    <div class="row" style="margin-top:10px"><button class="btn" id="e-add">Enregistrer la dépense</button></div>
+  </div>
+  <div class="panel"><h3>Mouvements</h3><div class="tablewrap"><table>
+    <tr><th>Date</th><th>Libellé</th><th class="num">Montant</th><th></th></tr>
+    ${all.length? all.map(x=>`<tr><td>${x.date}</td><td>${esc(x.label)}</td>
+      <td class="num" style="color:${x.in?'var(--vert)':'var(--rouge)'};font-weight:700">${x.in?"+":"−"} ${fmt(x.amount)}</td>
+      <td>${x.in?"":`<button class="del" data-dele="${x.id}">✕</button>`}</td></tr>`).join("") : `<tr><td colspan="4" class="empty">Aucun mouvement.</td></tr>`}
+  </table></div></div>`;
+}
+
+function vBackup(){
+  return `
+  <h2>Sauvegarde & export</h2>
+  <div class="panel">
+    <p style="margin-bottom:10px">Vos données sont sauvegardées automatiquement à chaque action. Par sécurité, <b>exportez une copie chaque semaine</b> (rituel du lundi) et conservez-la sur votre téléphone ou Drive.</p>
+    <div class="row">
+      <button class="btn" id="bk-export">Exporter la sauvegarde (JSON)</button>
+      <button class="btn b" id="bk-csv">Exporter les commandes (CSV)</button>
+      <button class="btn ghost" id="bk-import">Restaurer depuis un fichier…</button>
+      <input type="file" id="bk-file" accept=".json" style="display:none">
+    </div>
+  </div>
+  <div class="panel">
+    <h3>Contenu actuel</h3>
+    <p>${S.products.length} produits · ${S.clients.length} clients · ${S.orders.length} commandes · ${S.expenses.length} dépenses</p>
+    <div class="row" style="margin-top:10px"><button class="btn sm" style="background:var(--rouge)" id="bk-reset">Tout effacer (irréversible)</button></div>
+  </div>`;
+}
+
+// ---------- Actions ----------
+function bind(){
+  document.querySelectorAll("nav button").forEach(b=> b.onclick = ()=>{ tab=b.dataset.tab; render(); });
+
+  // Produits
+  const pAdd = el("p-add");
+  if(pAdd) pAdd.onclick = async ()=>{
+    const name = el("p-name").value.trim(); if(!name) return toast("Nom du produit requis");
+    S.products.push({ id:nid(), name, family:el("p-fam").value, cost:+el("p-cost").value||0, price:+el("p-price").value||0, stock:+el("p-stock").value||0, alert:+el("p-alert").value||0 });
+    await save(); render(); toast("Produit ajouté ✓");
+  };
+  document.querySelectorAll("[data-rcv]").forEach(b=> b.onclick = async ()=>{
+    const id=+b.dataset.rcv, q=+el("rcv-"+id).value;
+    if(!q||q<1) return toast("Indiquez la quantité reçue");
+    const p=S.products.find(p=>p.id===id); p.stock+=q; await save(); render(); toast("+"+q+" en stock ✓");
+  });
+  document.querySelectorAll("[data-delp]").forEach(b=> b.onclick = async ()=>{
+    const id=+b.dataset.delp;
+    if(S.orders.some(o=>o.lines.some(l=>l.productId===id))) return toast("Produit utilisé dans des commandes — suppression bloquée");
+    if(!confirm("Supprimer ce produit ?")) return;
+    S.products = S.products.filter(p=>p.id!==id); await save(); render();
+  });
+
+  // Clients
+  const cAdd = el("c-add");
+  if(cAdd) cAdd.onclick = async ()=>{
+    const name = el("c-name").value.trim(); if(!name) return toast("Nom du client requis");
+    S.clients.push({ id:nid(), name, type:el("c-type").value, zone:el("c-zone").value.trim(), phone:el("c-phone").value.trim() });
+    await save(); render(); toast("Client ajouté ✓");
+  };
+  document.querySelectorAll("[data-delc]").forEach(b=> b.onclick = async ()=>{
+    const id=+b.dataset.delc;
+    if(S.orders.some(o=>o.clientId===id)) return toast("Client avec commandes — suppression bloquée");
+    if(!confirm("Supprimer ce client ?")) return;
+    S.clients = S.clients.filter(c=>c.id!==id); await save(); render();
+  });
+
+  // Commandes — brouillon
+  if(el("o-client")){
+    el("o-client").onchange = e=>{ draft.clientId=+e.target.value; };
+    el("o-date").onchange = e=>{ draft.date=e.target.value; };
+    el("o-pay").onchange = e=>{ draft.payMode=e.target.value; };
+    el("o-addline").onclick = ()=>{ const p=S.products[0]; draft.lines.push({productId:p.id, qty:1, price:p.price}); render(); };
+    document.querySelectorAll("[data-lprod]").forEach(s=> s.onchange = e=>{
+      const i=+s.dataset.lprod, pid=+e.target.value, p=S.products.find(p=>p.id===pid);
+      draft.lines[i].productId=pid; draft.lines[i].price=p.price; render();
+    });
+    document.querySelectorAll("[data-lqty]").forEach(inp=> inp.onchange = e=>{ draft.lines[+inp.dataset.lqty].qty=Math.max(1,+e.target.value||1); render(); });
+    document.querySelectorAll("[data-lprice]").forEach(inp=> inp.onchange = e=>{ draft.lines[+inp.dataset.lprice].price=Math.max(0,+e.target.value||0); render(); });
+    document.querySelectorAll("[data-lrm]").forEach(b=> b.onclick = ()=>{ draft.lines.splice(+b.dataset.lrm,1); render(); });
+    el("o-save").onclick = async ()=>{
+      if(!draft.lines.length) return;
+      S.orders.push({ id:nid(), date:draft.date, clientId:draft.clientId, payMode:draft.payMode, lines:draft.lines, status:"pending" });
+      draft=null; await save(); render(); toast("Commande enregistrée ✓");
+    };
+  }
+  // Livrer / encaisser (présents sur dashboard et commandes)
+  document.querySelectorAll("[data-deliver]").forEach(b=> b.onclick = async ()=>{
+    const o=S.orders.find(o=>o.id===+b.dataset.deliver);
+    for(const l of o.lines){ const p=S.products.find(p=>p.id===l.productId); if(p && p.stock<l.qty && !confirm("Stock insuffisant sur "+p.name+" ("+p.stock+" dispo, "+l.qty+" demandés). Livrer quand même ?")) return; }
+    o.lines.forEach(l=>{ const p=S.products.find(p=>p.id===l.productId); if(p) p.stock=Math.max(0,p.stock-l.qty); });
+    if(o.payMode==="comptant"){ o.status="paid"; o.paidDate=today(); toast("Livrée et encaissée ✓"); }
+    else { o.status="delivered"; toast("Livrée — en attente d'encaissement"); }
+    await save(); render();
+  });
+  document.querySelectorAll("[data-pay]").forEach(b=> b.onclick = async ()=>{
+    const o=S.orders.find(o=>o.id===+b.dataset.pay); o.status="paid"; o.paidDate=today();
+    await save(); render(); toast("Encaissé ✓");
+  });
+
+  // Caisse
+  const eAdd = el("e-add");
+  if(eAdd) eAdd.onclick = async ()=>{
+    const label=el("e-label").value.trim(), amount=+el("e-amount").value;
+    if(!label||!amount) return toast("Libellé et montant requis");
+    S.expenses.push({ id:nid(), label, category:el("e-cat").value, amount, date:el("e-date").value||today() });
+    await save(); render(); toast("Dépense enregistrée ✓");
+  };
+  document.querySelectorAll("[data-dele]").forEach(b=> b.onclick = async ()=>{
+    if(!confirm("Supprimer cette dépense ?")) return;
+    S.expenses = S.expenses.filter(e=>e.id!==+b.dataset.dele); await save(); render();
+  });
+
+  // Sauvegarde
+  const bkE = el("bk-export");
+  if(bkE){
+    bkE.onclick = ()=>{
+      const blob = new Blob([JSON.stringify(S,null,2)],{type:"application/json"});
+      const a = document.createElement("a"); a.href=URL.createObjectURL(blob);
+      a.download = "distrivia-sauvegarde-"+today()+".json"; a.click();
+    };
+    el("bk-csv").onclick = ()=>{
+      const rows = [["Date","Client","Produit","Qté","Prix unitaire","Total ligne","Paiement","Statut"]];
+      S.orders.forEach(o=> o.lines.forEach(l=> rows.push([o.date, clientName(o.clientId), prodName(l.productId), l.qty, l.price, l.qty*l.price, o.payMode, o.status])));
+      const csv = rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(";")).join("\n");
+      const a = document.createElement("a"); a.href=URL.createObjectURL(new Blob(["\uFEFF"+csv],{type:"text/csv"}));
+      a.download = "distrivia-commandes-"+today()+".csv"; a.click();
+    };
+    el("bk-import").onclick = ()=> el("bk-file").click();
+    el("bk-file").onchange = e=>{
+      const f=e.target.files[0]; if(!f) return;
+      const r=new FileReader();
+      r.onload = async ()=>{ try{ const d=JSON.parse(r.result);
+        if(!d.products||!d.clients||!d.orders) throw 0;
+        S=d; await save(); render(); toast("Données restaurées ✓");
+      }catch(_){ toast("Fichier invalide"); } };
+      r.readAsText(f);
+    };
+    el("bk-reset").onclick = async ()=>{
+      if(!confirm("Effacer TOUTES les données ? Cette action est irréversible."))return;
+      if(!confirm("Vraiment sûr ? Exportez d'abord une sauvegarde."))return;
+      S={products:[],clients:[],orders:[],expenses:[],seq:1}; await save(); render();
+    };
+  }
+}
+
+load();
+</script>
+</body>
+</html>
