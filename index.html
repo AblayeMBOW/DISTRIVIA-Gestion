@@ -3,16 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DISTRIVIA Gestion - ERP Cloud</title>
+<title>DISTRIVIA Gestion - ERP Complet</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230F2A4A'/%3E%3Ctext x='32' y='42' font-family='Arial,sans-serif' font-size='34' font-weight='bold' fill='white' text-anchor='middle'%3ED%3C/text%3E%3Crect x='20' y='48' width='24' height='4' fill='%23C85E2D'/%3E%3C/svg%3E">
-<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230F2A4A'/%3E%3Ctext x='32' y='42' font-family='Arial' font-size='34' font-weight='bold' fill='white' text-anchor='middle'%3ED%3C/text%3E%3Crect x='20' y='48' width='24' height='4' fill='%23C85E2D'/%3E%3C/svg%3E">
 <style>
   :root{
     --bleu:#0F2A4A; --bleu2:#1B3D63; --terra:#C85E2D; --creme:#F5F1E8;
     --anthra:#1A1A1A; --gris:#888880; --blanc:#FFFFFF; --vert:#2E6B3E; --rouge:#A33B3B;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
-  body{font-family:'Segoe UI', system-ui, -apple-system, sans-serif; background:var(--creme); color:var(--anthra); font-size:15px;}
+  body{font-family:'Segoe UI', system-ui, -apple-system, sans-serif; background:var(--creme); color:var(--anthra); font-size:14px;}
   header{background:var(--bleu); padding:10px 18px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;}
   .brand{display:flex; flex-direction:column; flex-shrink:0;}
   .wordmark{color:#fff; font-weight:800; letter-spacing:6px; font-size:19px;}
@@ -30,11 +29,11 @@
   .hsr-empty{padding:14px; color:var(--gris); font-style:italic; font-size:13px; text-align:center;}
   .uzone{display:flex; align-items:center; gap:10px; color:#C9D4E2; font-size:13px; flex-shrink:0;}
   .uzone b{color:#fff;}
-  nav{display:flex; background:var(--bleu2); overflow-x:auto; -webkit-overflow-scrolling:touch;}
-  nav button{flex:0 0 auto; padding:11px 16px; background:none; border:none; color:#C9D4E2; font-weight:600; font-size:13px; cursor:pointer; border-bottom:3px solid transparent; white-space:nowrap;}
+  nav{display:flex; background:var(--bleu2); overflow-x:auto; -webkit-overflow-scrolling:touch; flex-wrap:wrap;}
+  nav button{flex:0 0 auto; padding:11px 14px; background:none; border:none; color:#C9D4E2; font-weight:600; font-size:12px; cursor:pointer; border-bottom:3px solid transparent; white-space:nowrap;}
   nav button.active{color:#fff; border-bottom-color:var(--terra); background:rgba(255,255,255,.05);}
-  main{max-width:1100px; margin:0 auto; padding:16px;}
-  h2{color:var(--bleu); font-size:19px; margin:6px 0 12px;}
+  main{max-width:1200px; margin:0 auto; padding:16px;}
+  h2{color:var(--bleu); font-size:19px; margin:6px 0 12px; border-left:4px solid var(--terra); padding-left:12px;}
   h3{color:var(--terra); font-size:13.5px; margin:14px 0 8px; text-transform:uppercase; letter-spacing:1px;}
   .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:16px;}
   .card{background:#fff; border-radius:10px; padding:13px; box-shadow:0 1px 4px rgba(15,42,74,.10);}
@@ -42,49 +41,46 @@
   .card .l{font-size:11.5px; color:var(--gris); margin-top:2px;}
   .card.t .v{color:var(--terra);} .card.g .v{color:var(--vert);} .card.r .v{color:var(--rouge);}
   .panel{background:#fff; border-radius:10px; padding:14px; box-shadow:0 1px 4px rgba(15,42,74,.10); margin-bottom:14px;}
-  table{width:100%; border-collapse:collapse; font-size:13.5px;}
+  table{width:100%; border-collapse:collapse; font-size:13px;}
   th{background:var(--bleu); color:#fff; text-align:left; padding:8px; font-size:11px; letter-spacing:.5px; text-transform:uppercase;}
   td{padding:8px; border-bottom:1px solid #EDE7DA; vertical-align:middle;}
   tr:nth-child(even) td{background:#FAF7F0;}
   .num{text-align:right; font-variant-numeric:tabular-nums;}
-  .btn{background:var(--terra); color:#fff; border:none; border-radius:7px; padding:9px 14px; font-weight:700; cursor:pointer; font-size:13.5px;}
+  .btn{background:var(--terra); color:#fff; border:none; border-radius:7px; padding:9px 14px; font-weight:700; cursor:pointer; font-size:13px; transition:opacity 0.2s;}
+  .btn:hover{opacity:0.85;}
   .btn.b{background:var(--bleu);} .btn.ghost{background:#EDE7DA; color:var(--bleu);}
-  .btn.sm{padding:5px 9px; font-size:12px;}
+  .btn.sm{padding:5px 9px; font-size:11px;}
   .btn:disabled{opacity:.45; cursor:not-allowed;}
   .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
   .grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px;}
-  label{display:block; font-size:11.5px; font-weight:700; color:var(--bleu); margin:8px 0 3px; text-transform:uppercase; letter-spacing:.5px;}
-  input,select,textarea{width:100%; padding:9px; border:1.5px solid #D8D2C4; border-radius:7px; font-size:14px; background:#fff;}
+  label{display:block; font-size:11px; font-weight:700; color:var(--bleu); margin:8px 0 3px; text-transform:uppercase; letter-spacing:.5px;}
+  input,select,textarea{width:100%; padding:8px; border:1.5px solid #D8D2C4; border-radius:7px; font-size:13px; background:#fff;}
   input:focus,select:focus{outline:none; border-color:var(--terra);}
-  .badge{display:inline-block; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:700; color:#fff; white-space:nowrap;}
+  .badge{display:inline-block; padding:3px 9px; border-radius:20px; font-size:10px; font-weight:700; color:#fff; white-space:nowrap;}
   .badge.pending{background:var(--gris);} .badge.delivered{background:var(--bleu);} .badge.paid{background:var(--vert);}
   .badge.alert{background:var(--rouge);} .badge.ok{background:var(--vert);} .badge.credit{background:var(--terra);}
   .badge.admin{background:var(--bleu);} .badge.emp{background:var(--gris);} .badge.off{background:var(--rouge);}
-  .alertbox{background:#FCEFE7; border-left:4px solid var(--terra); padding:10px 12px; border-radius:6px; margin-bottom:10px; font-size:13.5px;}
+  .alertbox{background:#FCEFE7; border-left:4px solid var(--terra); padding:10px 12px; border-radius:6px; margin-bottom:10px; font-size:13px;}
   .infobox{background:#EDF2F8; border-left:4px solid var(--bleu); padding:10px 12px; border-radius:6px; margin-bottom:10px; font-size:13px;}
   .empty{color:var(--gris); font-style:italic; padding:14px; text-align:center;}
-  .lines .ln{display:grid; grid-template-columns:1fr 84px 110px 34px; gap:6px; margin-bottom:6px; align-items:center;}
+  .lines .ln{display:grid; grid-template-columns:1fr 80px 100px 30px; gap:6px; margin-bottom:6px; align-items:center;}
   .del{background:none; border:none; color:var(--rouge); font-size:17px; cursor:pointer;}
   .total{font-size:17px; font-weight:800; color:var(--bleu); text-align:right; margin-top:8px;}
-  .muted{color:var(--gris); font-size:12px;}
+  .muted{color:var(--gris); font-size:11px;}
   .tablewrap{overflow-x:auto;}
-  .searchwrap{position:relative; margin-bottom:14px;}
-  .searchwrap input{padding:12px 14px; font-size:15px; border-radius:9px; border:2px solid #D8D2C4;}
-  .perms{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:4px 14px; margin-top:6px;}
-  .perms label{display:flex; align-items:center; gap:7px; text-transform:none; font-size:13px; font-weight:500; color:var(--anthra); margin:3px 0;}
+  .perms{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:4px 14px; margin-top:6px;}
+  .perms label{display:flex; align-items:center; gap:7px; text-transform:none; font-size:12px; font-weight:500; color:var(--anthra); margin:3px 0;}
   .perms input{width:auto;}
   .login{max-width:400px; margin:7vh auto; background:#fff; border-radius:12px; padding:26px; box-shadow:0 4px 18px rgba(15,42,74,.15);}
   .login .wordmark{color:var(--bleu); text-align:center; letter-spacing:7px; font-size:24px;}
   .login .bar{margin:6px auto;} .login .sub{color:var(--gris); text-align:center; letter-spacing:3px;}
-  #toast{position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--bleu); color:#fff; padding:11px 18px; border-radius:8px; font-weight:600; display:none; z-index:50; box-shadow:0 4px 14px rgba(0,0,0,.25); max-width:90vw; text-align:center;}
+  #toast{position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--bleu); color:#fff; padding:10px 16px; border-radius:8px; font-weight:600; display:none; z-index:50; box-shadow:0 4px 14px rgba(0,0,0,.25); max-width:90vw; text-align:center; font-size:13px;}
   .modalbg{position:fixed; inset:0; background:rgba(15,42,74,.55); display:flex; align-items:center; justify-content:center; padding:14px; z-index:60;}
-  .modal{background:#fff; border-radius:12px; padding:20px; width:100%; max-width:480px; max-height:92vh; overflow:auto; box-shadow:0 10px 40px rgba(0,0,0,.3);}
+  .modal{background:#fff; border-radius:12px; padding:20px; width:100%; max-width:500px; max-height:92vh; overflow:auto; box-shadow:0 10px 40px rgba(0,0,0,.3);}
   .modal h3{margin-top:0;}
   .x{background:none; border:none; font-size:22px; color:var(--gris); cursor:pointer; line-height:1;}
-  @media(max-width:560px){ .lines .ln{grid-template-columns:1fr 64px 88px 30px;} main{padding:10px;} }
+  @media(max-width:560px){ .lines .ln{grid-template-columns:1fr 60px 80px 30px;} main{padding:10px;} nav button{padding:8px 10px; font-size:10px;} }
   @media print{ body *{visibility:hidden;} #printarea, #printarea *{visibility:visible;} #printarea{position:absolute; left:0; top:0; width:100%; padding:10px;} }
-  .sync-badge{position:fixed; bottom:10px; right:10px; background:var(--vert); color:#fff; padding:4px 10px; border-radius:20px; font-size:10px; font-weight:bold; z-index:100; opacity:0.8; pointer-events:none;}
-  .sync-badge.offline{background:var(--gris);}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -95,709 +91,422 @@
 <div id="modal"></div>
 <div id="printarea" style="display:none"></div>
 <div id="toast"></div>
-<div id="sync-badge" class="sync-badge">☁️ Synced</div>
 
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
-  import { 
-    getFirestore, 
-    doc, 
-    getDoc, 
-    setDoc, 
-    deleteDoc, 
-    onSnapshot,
-    serverTimestamp 
-  } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
+<script>
+// ==================== CONSTANTES ====================
+const FAMILIES = ["Restauration & take-away","Hygiène & entretien","Médical","Événementiel","Écologique","Consommables informatiques","Matériel de bureau","Mobilier de bureau"];
+const CLIENT_TYPES = ["Dibiterie / gargote","Restaurant / fast-food","Traiteur / événementiel","Boulangerie","Boutique revendeuse","Clinique / pharmacie","Hôtel","Entreprise / école","Autre"];
+const PERMS = [
+  ["orders_create","Créer des commandes"],["orders_edit","Modifier les commandes"],["orders_cancel","Annuler les commandes"],
+  ["orders_deliver","Livrer les commandes"],["orders_pay","Encaisser les paiements"],["clients_manage","Ajouter / modifier les clients"],
+  ["clients_edit","Modifier les clients existants"],["products_manage","Gérer les produits et prix"],["stock_receive","Réceptionner du stock"],
+  ["cash_view","Voir la caisse et les soldes"],["cash_expense","Enregistrer des dépenses"],["suppliers","Gérer les fournisseurs et achats"],
+  ["accounting","Voir la comptabilité"],["control","Voir le contrôle de gestion"],["logistics","Gérer la logistique"],
+  ["marketing","Voir et gérer le marketing"],["hr","Voir et gérer les RH"],["monitoring","Voir le monitoring"]
+];
+const COUNTRY_CODES = [
+  ["+221","🇸🇳 Sénégal"],["+223","🇲🇱 Mali"],["+225","🇨🇮 Côte d'Ivoire"],["+222","🇲🇷 Mauritanie"],
+  ["+224","🇬🇳 Guinée"],["+226","🇧🇫 Burkina"],["+227","🇳🇪 Niger"],["+228","🇹🇬 Togo"],["+229","🇧🇯 Bénin"],
+  ["+233","🇬🇭 Ghana"],["+234","🇳🇬 Nigéria"],["+212","🇲🇦 Maroc"],["+216","🇹🇳 Tunisie"],["+33","🇫🇷 France"],
+  ["+86","🇨🇳 Chine"],["+90","🇹🇷 Turquie"],["+1","🇺🇸 USA/Canada"],["+44","🇬🇧 UK"],["+971","🇦🇪 Émirats"]
+];
+const CHANNELS = ["WhatsApp","SMS","Facebook","Instagram","Terrain / visite","Affichage","Radio","Bouche à oreille","Autre"];
+const HR_CONTRACTS = ["CDI","CDD","Stage","Prestation","Journalier"];
+const HR_DEPARTMENTS = ["Direction","Commercial","Logistique","Administratif","Marketing","Livraison"];
+const PAY_METHODS = ["Espèces","Wave","Orange Money","Virement bancaire","Chèque"];
+const SUPPLIER_ZONES = ["Chine","Turquie","Maroc","Local Sénégal","Autre"];
+const KEY = "distrivia-erp-v1";
+const KEY_SESSION = "distrivia-session";
 
-  // Configuration Firebase
-  const firebaseConfig = {
-    apiKey: "AIzaSyCcl7rBRT1jiDwVR30_1dUND9HCKkq8sgg",
-    authDomain: "distrivia-group.firebaseapp.com",
-    projectId: "distrivia-group",
-    storageBucket: "distrivia-group.firebasestorage.app",
-    messagingSenderId: "379306867104",
-    appId: "1:379306867104:web:08d849ee32095d67a88cc5",
-    measurementId: "G-0EB884J2JS"
+// ==================== STOCKAGE ====================
+const store = {
+  async get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } },
+  async set(k,v){ try { localStorage.setItem(k, v); } catch(e){} },
+  async del(k){ try { localStorage.removeItem(k); } catch(e){} }
+};
+
+// ==================== ÉTAT ====================
+let S = { version:5, users:[], products:[], clients:[], orders:[], expenses:[], suppliers:[], purchases:[], campaigns:[], employees:[], objectives:{}, logs:[], seq:1, orderSeq:1, poSeq:1 };
+let session = null;
+let tab = "dash";
+let draft = null;
+let editUserId = null, editOrder = null, editClientId = null, editSupplierId = null, editCampaignId = null, editEmployeeId = null;
+let searchQ = "";
+let acctPeriod = { from:"", to:"" }, ctrlPeriod = { from:"", to:"" }, cashPeriod = { from:"", to:"" }, monitorPeriod = { from:"", to:"" };
+
+// ==================== HELPERS ====================
+const fmt = n => (Math.round(n)||0).toLocaleString("fr-FR") + " F";
+const today = () => new Date().toISOString().slice(0,10);
+const now = () => new Date().toISOString().slice(0,16).replace("T"," ");
+const monthKey = d => (d||today()).slice(0,7);
+const el = id => document.getElementById(id);
+const esc = s => String(s??"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function toast(msg){ const t = el("toast"); t.textContent = msg; t.style.display = "block"; setTimeout(()=>t.style.display="none", 2500); }
+function nid(){ return S.seq++; }
+
+// ==================== AUTH ====================
+async function sha256(txt){
+  if(window.crypto?.subtle){
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(txt));
+    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+  }
+  let h=0; for(let i=0;i<txt.length;i++){ h = (h*31 + txt.charCodeAt(i))|0; } return "x"+(h>>>0).toString(16);
+}
+const me = () => S.users.find(u=>u.id===session?.userId) || null;
+const isAdmin = () => me()?.role === "admin";
+const can = p => isAdmin() || !!me()?.perms?.[p];
+function log(action){ S.logs.unshift({ d: now(), u: me()?.name || "—", a: action }); if(S.logs.length>300) S.logs.length=300; }
+
+// ==================== PERSISTANCE ====================
+async function loadAll(){
+  try{ const raw = await store.get(KEY); if(raw) S = JSON.parse(raw); }catch(e){}
+  migrate();
+  try{ const rs = await store.get(KEY_SESSION); if(rs) session = JSON.parse(rs); }catch(e){}
+  if(session && !me()) session = null;
+  render();
+}
+async function save(){ try{ await store.set(KEY, JSON.stringify(S)); }catch(e){ toast("⚠ Sauvegarde échouée"); } }
+async function saveSession(){ if(session) await store.set(KEY_SESSION, JSON.stringify(session)); else await store.del(KEY_SESSION); }
+
+function migrate(){
+  if(!S.version || S.version<2){ S.version=2; S.users=S.users||[]; S.logs=S.logs||[]; S.orderSeq=S.orderSeq||1;
+    (S.orders||[]).forEach(o=>{ if(!o.num) o.num="CMD-"+String(S.orderSeq++).padStart(4,"0"); if(!o.payments) o.payments=[]; }); }
+  if(!S.version || S.version<3){ S.version=3; S.suppliers=S.suppliers||[]; S.purchases=S.purchases||[]; S.poSeq=S.poSeq||1;
+    (S.orders||[]).forEach(o=>{ if(o.delivered===undefined) o.delivered=false; if(o.payments) o.payments.forEach(p=>{ if(!p.method) p.method="Espèces"; }); }); }
+  if(!S.version || S.version<4){ S.version=4; S.campaigns=S.campaigns||[]; S.employees=S.employees||[];
+    (S.clients||[]).forEach(c=>{ if(c.dial===undefined){ let raw=(c.phone||"").trim(), dial="+221", local=raw; const m=raw.match(/^(\+\d{1,4})[\s.-]*(.*)$/); if(m){ dial=m[1].replace(/\s/g,""); local=m[2]; } c.dial=dial; c.local=(local||"").replace(/[^\d]/g,""); c.phone=c.local?(c.dial+" "+c.local):""; } }); }
+  if(!S.version || S.version<5){ S.version=5; S.objectives=S.objectives||{}; }
+  if(S.orderSeq===undefined) S.orderSeq=(S.orders?.length||0)+1;
+  if(S.poSeq===undefined) S.poSeq=(S.purchases?.length||0)+1;
+}
+
+// ==================== MÉTIER ====================
+function normPhone(dial, local){ return (local||"").replace(/[^\d]/g,""); }
+function fullPhone(c){ return c.local ? (c.dial+" "+c.local) : ""; }
+function phoneExists(dial, local, exceptId){ const n=normPhone(dial,local); if(!n) return false; return S.clients.some(c=> c.id!==exceptId && c.dial===dial && normPhone(c.dial,c.local)===n); }
+
+const orderTotal = o => o.lines.reduce((a,l)=>a+l.qty*l.price,0);
+const orderPaid = o => (o.payments||[]).reduce((a,p)=>a+p.amount,0);
+const orderDue = o => Math.max(0, orderTotal(o)-orderPaid(o));
+const orderCost = o => o.lines.reduce((a,l)=>{ const p=S.products.find(p=>p.id===l.productId); return a+l.qty*(p?.cost||0); },0);
+const clientName = id => S.clients.find(c=>c.id===id)?.name || "—";
+const prodName = id => S.products.find(p=>p.id===id)?.name || "—";
+
+function refreshStatus(o){ if(o.status==="cancelled") return; if(!o.delivered) o.status="pending"; else o.status=orderDue(o)<=0?"paid":"delivered"; }
+function deliveryLabel(o){ if(o.status==="cancelled") return '<span class="badge off">Annulée</span>'; return o.delivered?'<span class="badge delivered">Livrée</span>':'<span class="badge pending">Non livrée</span>'; }
+function payLabel(o){ if(o.status==="cancelled") return "—"; const due=orderDue(o); if(due<=0) return '<span class="badge paid">Payée</span>'; if(orderPaid(o)>0) return '<span class="badge credit">Partiel</span>'; return '<span class="badge pending">Impayée</span>'; }
+
+function kpis(){
+  const m=monthKey();
+  const live=S.orders.filter(o=>o.status!=="cancelled");
+  const delivered=live.filter(o=>o.status!=="pending");
+  const caMonth=delivered.filter(o=>monthKey(o.date)===m).reduce((a,o)=>a+orderTotal(o),0);
+  const margeMonth=delivered.filter(o=>monthKey(o.date)===m).reduce((a,o)=>a+orderTotal(o)-orderCost(o),0);
+  let encMonth=0,cashIn=0;
+  live.forEach(o=>(o.payments||[]).forEach(p=>{ cashIn+=p.amount; if(monthKey(p.date)===m) encMonth+=p.amount; }));
+  const credit=delivered.reduce((a,o)=>a+orderDue(o),0);
+  const alerts=S.products.filter(p=>p.stock<=p.alert);
+  const stockValue=S.products.reduce((a,p)=>a+p.stock*p.cost,0);
+  const cashOut=S.expenses.reduce((a,e)=>a+e.amount,0);
+  return {caMonth,margeMonth,encMonth,credit,alerts,stockValue,solde:cashIn-cashOut};
+}
+
+// ==================== VUES ====================
+function vSetup(){ return `<div class="login"><div class="wordmark">DISTRIVIA</div><div class="bar"></div><div class="sub">DISTRIBUTION GROUP</div><h2 style="text-align:center;margin-top:16px">Première utilisation</h2><p class="muted" style="text-align:center">Créez le compte administrateur.</p><label>Nom complet</label><input id="su-name" placeholder="Ex. Ablaye Mbow"><label>Identifiant</label><input id="su-login" placeholder="Ex. ablaye"><label>Mot de passe</label><input id="su-pass" type="password"><label>Confirmer</label><input id="su-pass2" type="password"><button class="btn" id="su-go" style="width:100%;margin-top:14px">Créer le compte admin</button></div>`; }
+function vLogin(){ return `<div class="login"><div class="wordmark">DISTRIVIA</div><div class="bar"></div><div class="sub">DISTRIBUTION GROUP</div><h2 style="text-align:center;margin-top:16px">Connexion</h2><label>Identifiant</label><input id="lg-login"><label>Mot de passe</label><input id="lg-pass" type="password"><button class="btn" id="lg-go" style="width:100%;margin-top:14px">Se connecter</button></div>`; }
+
+function chrome(content){
+  const u=me();
+  const tabs=[["dash","📊 Tableau de bord",true],["orders","📦 Commandes",true],["clients","👥 Clients",true],["products","📦 Produits",true],["suppliers","🏭 Fournisseurs",can("suppliers")],["logistics","🚚 Logistique",can("logistics")],["cash","💰 Caisse",can("cash_view")],["accounting","📈 Comptabilité",can("accounting")],["control","📊 Contrôle",can("control")],["marketing","📢 Marketing",can("marketing")],["hr","👔 RH",can("hr")],["monitoring","📉 Monitoring",can("monitoring")],["users","👤 Utilisateurs",isAdmin()],["backup","💾 Sauvegarde",isAdmin()]];
+  return `<header><div class="brand"><div class="wordmark">DISTRIVIA</div><div class="bar"></div><div class="sub">DISTRIBUTION GROUP</div></div><div class="hsearch"><input id="globalsearch" placeholder="Rechercher..." value="${esc(searchQ)}"><div class="hsearch-results" id="hsearch-results"></div></div><div class="uzone"><span>👤 <b>${esc(u.name)}</b> ${u.role==="admin"?'<span class="badge admin">Admin</span>':'<span class="badge emp">Employé</span>'}</span><button class="btn sm ghost" id="myprofile">Profil</button><button class="btn sm ghost" id="logout">Déconnexion</button></div></header><nav>${tabs.filter(t=>t[2]).map(t=>`<button data-tab="${t[0]}" class="${tab===t[0]?"active":""}">${t[1]}</button>`).join("")}</nav><main>${content}</main>`;
+}
+
+function globalSearchHTML(){
+  const q=searchQ.trim().toLowerCase(); if(q.length<2) return "";
+  const cs=S.clients.filter(c=>c.name.toLowerCase().includes(q)).slice(0,5);
+  const os=S.orders.filter(o=>o.num.toLowerCase().includes(q)).slice(0,5);
+  if(!cs.length&&!os.length) return `<div class="hsr-empty">Aucun résultat</div>`;
+  let h="";
+  if(cs.length) h+=`<div class="hsr-cat">Clients</div>`+cs.map(c=>`<div class="hsr-item" data-goclient="${c.id}"><b>${esc(c.name)}</b> · ${esc(c.phone||"—")}</div>`).join("");
+  if(os.length) h+=`<div class="hsr-cat">Commandes</div>`+os.map(o=>`<div class="hsr-item" data-goorder="${o.id}"><b>${esc(o.num)}</b> · ${esc(clientName(o.clientId))}</div>`).join("");
+  return h;
+}
+
+function orderRow(o){
+  const due=orderDue(o);
+  let act="";
+  if(o.status!=="cancelled"){
+    if(!o.delivered&&can("orders_deliver")) act+=`<button class="btn sm b" data-deliver="${o.id}">Livrer</button> `;
+    if(due>0&&can("orders_pay")) act+=`<button class="btn sm" data-quickpay="${o.id}">Encaisser</button> `;
+    if(can("orders_edit")) act+=`<button class="btn sm ghost" data-oedit="${o.id}">Modifier</button> `;
+    act+=`<button class="btn sm ghost" data-oreceipt="${o.id}">Reçu</button> `;
+    if(can("orders_cancel")) act+=`<button class="btn sm" style="background:var(--rouge)" data-ocancel="${o.id}">Annuler</button>`;
+  } else { act=`<span class="muted">Annulée</span>`; }
+  return `<tr><td><b><a href="#" data-odetail="${o.id}">${esc(o.num)}</a></b></td><td class="muted">${o.date}</td><td><a href="#" data-cdetail="${o.clientId}">${esc(clientName(o.clientId))}</a></td><td class="num">${fmt(orderTotal(o))}</td><td class="num">${due?fmt(due):"—"}</td><td>${deliveryLabel(o)}</td><td>${payLabel(o)}</td><td>${act}</td></tr>`;
+}
+
+// Dashboard
+function vDash(){
+  const k=kpis();
+  const recent=S.orders.sort((a,b)=>b.id-a.id).slice(0,10);
+  return `<h2>Tableau de bord</h2><div class="cards"><div class="card"><div class="v">${fmt(k.caMonth)}</div><div class="l">CA du mois</div></div><div class="card g"><div class="v">${fmt(k.margeMonth)}</div><div class="l">Marge brute</div></div><div class="card"><div class="v">${fmt(k.encMonth)}</div><div class="l">Encaissé</div></div><div class="card t"><div class="v">${fmt(k.credit)}</div><div class="l">Crédit client</div></div><div class="card"><div class="v">${fmt(k.stockValue)}</div><div class="l">Valeur stock</div></div><div class="card ${k.solde<0?'r':'g'}"><div class="v">${fmt(k.solde)}</div><div class="l">Solde caisse</div></div></div>${k.alerts.length?`<div class="alertbox">⚠ Stock bas : ${k.alerts.map(p=>p.name).join(", ")}</div>`:""}<div class="panel"><h3>Dernières commandes</h3><div class="tablewrap"><table><tr><th>N°</th><th>Date</th><th>Client</th><th>Total</th><th>Statut</th></tr>${recent.map(o=>`<tr><td><a href="#" data-odetail="${o.id}">${esc(o.num)}</a></td><td>${o.date}</td><td>${esc(clientName(o.clientId))}</td><td class="num">${fmt(orderTotal(o))}</td><td>${deliveryLabel(o)} ${payLabel(o)}</td></tr>`).join("")}</table></div></div>`;
+}
+
+// Commandes
+function vOrders(){
+  const canCreate=can("orders_create");
+  let form="";
+  if(canCreate&&S.products.length&&S.clients.length){
+    if(!draft) draft={clientId:S.clients[0]?.id, date:today(), lines:[]};
+    const total=draft.lines.reduce((a,l)=>a+l.qty*l.price,0);
+    form=`<div class="panel"><h3>Nouvelle commande</h3><div class="grid2"><div><label>Client</label><select id="o-client">${S.clients.map(c=>`<option value="${c.id}" ${c.id==draft.clientId?"selected":""}>${esc(c.name)}</option>`).join("")}</select></div><div><label>Date</label><input id="o-date" type="date" value="${draft.date}"></div></div><h3>Lignes</h3><div class="lines">${draft.lines.map((l,i)=>`<div class="ln"><select data-lprod="${i}">${S.products.map(p=>`<option value="${p.id}" ${p.id==l.productId?"selected":""}>${esc(p.name)} (${p.price} F)</option>`).join("")}</select><input type="number" min="1" value="${l.qty}" data-lqty="${i}"><input type="number" min="0" value="${l.price}" data-lprice="${i}"><button class="del" data-lrm="${i}">✕</button></div>`).join("")}</div><div class="row"><button class="btn ghost" id="o-addline">+ Ajouter ligne</button></div><div class="total">Total : ${fmt(total)}</div><div class="row"><button class="btn" id="o-save" ${draft.lines.length?"":"disabled"}>Enregistrer</button></div></div>`;
+  } else if(canCreate&&(!S.products.length||!S.clients.length)){
+    form=`<div class="panel alertbox">Créez d'abord des produits et des clients.</div>`;
+  }
+  const orders=[...S.orders].sort((a,b)=>b.id-a.id);
+  return `<h2>Commandes</h2>${form}<div class="panel"><div class="tablewrap"><table>${orderTableHead()}${orders.length?orders.map(o=>orderRow(o)).join(""):`<td><td colspan="7" class="empty">Aucune commande.</td></tr>`}</table></div></div>`;
+}
+function orderTableHead(){ return `<tr><th>N°</th><th>Date</th><th>Client</th><th class="num">Total</th><th class="num">Reste</th><th>Livraison</th><th>Paiement</th><th></th></tr>`; }
+
+// Clients
+function vClients(){
+  const cm=can("clients_manage")||can("clients_edit");
+  const ec=editClientId?S.clients.find(c=>c.id===editClientId):null;
+  return `<h2>Clients</h2>${cm?`<div class="panel"><h3>${ec?"Modifier client":"Nouveau client"}</h3><div class="grid2"><div><label>Nom</label><input id="c-name" value="${ec?esc(ec.name):""}"></div><div><label>Type</label><select id="c-type">${CLIENT_TYPES.map(t=>`<option ${ec?.type===t?"selected":""}>${t}</option>`).join("")}</select></div><div><label>Zone</label><input id="c-zone" value="${ec?esc(ec.zone):""}"></div><div><label>Code pays</label><select id="c-dial">${COUNTRY_CODES.map(([code,lbl])=>`<option value="${code}" ${ec?.dial===code||(!ec&&code==="+221")?"selected":""}>${lbl}</option>`).join("")}</select></div><div><label>Téléphone</label><input id="c-local" value="${ec?esc(ec.local||""):""}"></div></div><div class="row"><button class="btn" id="c-add">${ec?"Enregistrer":"Ajouter"}</button>${ec?'<button class="btn ghost" id="c-cancel">Annuler</button>':""}</div></div>`:""}<div class="panel"><div class="tablewrap"><table><th>Nom</th><th>Type</th><th>Zone</th><th>Téléphone</th><th class="num">CA</th><th class="num">Crédit</th>${cm?"<th></th>":""}</tr>${S.clients.map(c=>{const co=S.orders.filter(o=>o.clientId===c.id); const ca=co.reduce((a,o)=>a+orderTotal(o),0); const cr=co.reduce((a,o)=>a+orderDue(o),0); return `<td><td><b>${esc(c.name)}</b></td><td class="muted">${c.type||"—"}</td><td class="muted">${c.zone||"—"}</td><td>${fullPhone(c)}</td><td class="num">${fmt(ca)}</td><td class="num">${cr?fmt(cr):"—"}</td>${cm?`<td class="row"><button class="btn sm ghost" data-cedit="${c.id}">✎</button><button class="del" data-delc="${c.id}">✕</button></td>`:""}</tr>`}).join("")}</div></div>`;
+}
+
+// Produits
+function vProducts(){
+  const pm=can("products_manage");
+  const sr=can("stock_receive");
+  return `<h2>Produits & Stock</h2>${pm?`<div class="panel"><h3>Ajouter un produit</h3><div class="grid2"><div><label>Nom</label><input id="p-name"></div><div><label>Famille</label><select id="p-fam">${FAMILIES.map(f=>`<option>${f}</option>`).join("")}</select></div><div><label>Coût (FCFA)</label><input id="p-cost" type="number" min="0"></div><div><label>Prix (FCFA)</label><input id="p-price" type="number" min="0"></div><div><label>Stock</label><input id="p-stock" type="number" min="0" value="0"></div><div><label>Alerte seuil</label><input id="p-alert" type="number" min="0" value="20"></div></div><button class="btn" id="p-add">Ajouter</button></div>`:""}<div class="panel"><div class="tablewrap"><tr><th>Produit</th><th>Famille</th><th class="num">Prix</th><th class="num">Stock</th><th>État</th>${sr?"<th>Réception</th>":""}${pm?"<th></th>":""}</tr>${S.products.map(p=>`<tr><td><b>${esc(p.name)}</b></td><td class="muted">${p.family}</td><td class="num">${fmt(p.price)}</td><td class="num"><b>${p.stock}</b></td><td>${p.stock<=p.alert?'<span class="badge alert">BAS</span>':'<span class="badge ok">OK</span>'}</td>${sr?`<td><input type="number" min="1" style="width:70px" id="rcv-${p.id}" placeholder="+"><button class="btn sm b" data-rcv="${p.id}">Ajouter</button></td>`:""}${pm?`<td><button class="del" data-delp="${p.id}">✕</button></td>`:""}</tr>`).join("")}</div></div>`;
+}
+
+// Fournisseurs
+function vSuppliers(){
+  return `<h2>Fournisseurs</h2><div class="panel"><div class="tablewrap"><tr><th>Nom</th><th>Zone</th><th>Contact</th><th>Catégorie</th><th></th></tr>${S.suppliers.map(s=>`<tr><td><b>${esc(s.name)}</b></td><td>${s.zone||"—"}</td><td class="muted">${s.contact||"—"}</td><td class="muted">${s.cat||"—"}</td><td><button class="btn sm ghost" data-sedit="${s.id}">✎</button><button class="del" data-dels="${s.id}">✕</button></td></tr>`).join("")}</div></div><div class="panel"><h3>Ajouter fournisseur</h3><div class="grid2"><div><label>Nom</label><input id="s-name"></div><div><label>Zone</label><select id="s-zone">${SUPPLIER_ZONES.map(z=>`<option>${z}</option>`).join("")}</select></div><div><label>Contact</label><input id="s-contact"></div><div><label>Catégorie</label><input id="s-cat"></div></div><button class="btn" id="s-add">Ajouter</button></div>`;
+}
+
+// Logistique
+function vLogistics(){
+  const pending=S.orders.filter(o=>o.status!=="cancelled"&&!o.delivered);
+  return `<h2>Logistique - Livraisons</h2><div class="panel"><h3>Commandes à livrer (${pending.length})</h3><div class="tablewrap"><tr><th>N°</th><th>Client</th><th>Zone</th><th>Montant</th><th></th></tr>${pending.map(o=>`<tr><td><b>${o.num}</b></td><td>${esc(clientName(o.clientId))}</td><td>${esc(S.clients.find(c=>c.id===o.clientId)?.zone||"—")}</td><td class="num">${fmt(orderTotal(o))}</td><td>${can("orders_deliver")?`<button class="btn sm b" data-deliver="${o.id}">Livrer</button>`:""}</td></tr>`).join("")}</div></div>`;
+}
+
+// Caisse
+function vCash(){
+  const payments=[];
+  S.orders.forEach(o=>(o.payments||[]).forEach(p=>payments.push({date:p.date,label:`Versement ${o.num} - ${clientName(o.clientId)}`,amount:p.amount,in:true,by:p.by})));
+  S.expenses.forEach(e=>payments.push({date:e.date,label:e.label,amount:e.amount,in:false,by:e.by}));
+  payments.sort((a,b)=>b.date.localeCompare(a.date));
+  const totalIn=payments.filter(p=>p.in).reduce((a,p)=>a+p.amount,0);
+  const totalOut=payments.filter(p=>!p.in).reduce((a,p)=>a+p.amount,0);
+  return `<h2>Caisse</h2><div class="cards"><div class="card g"><div class="v">${fmt(totalIn)}</div><div class="l">Encaissements</div></div><div class="card r"><div class="v">${fmt(totalOut)}</div><div class="l">Dépenses</div></div><div class="card"><div class="v">${fmt(totalIn-totalOut)}</div><div class="l">Solde</div></div></div>${can("cash_expense")?`<div class="panel"><h3>Nouvelle dépense</h3><div class="grid2"><div><label>Libellé</label><input id="e-label"></div><div><label>Catégorie</label><select id="e-cat"><option>Transport</option><option>Loyer</option><option>Salaires</option><option>Marketing</option><option>Divers</option></select></div><div><label>Montant</label><input id="e-amount" type="number" min="0"></div><div><label>Date</label><input id="e-date" type="date" value="${today()}"></div></div><button class="btn" id="e-add">Enregistrer</button></div>`:""}<div class="panel"><div class="tablewrap"><tr><th>Date</th><th>Libellé</th><th>Par</th><th class="num">Montant</th></tr>${payments.map(p=>`</tr><td class="muted">${p.date}</td><td>${esc(p.label)}</td><td class="muted">${p.by||"—"}</td><td class="num" style="color:${p.in?'var(--vert)':'var(--rouge)'}">${p.in?"+":"-"}${fmt(p.amount)}</td></tr>`).join("")}</div></div>`;
+}
+
+// Comptabilité
+function vAccounting(){
+  return `<h2>Comptabilité SYSCOHADA</h2><div class="infobox">Module de comptabilité en cours de développement. Les écritures seront générées automatiquement.</div><div class="panel"><p>Fonctionnalités à venir : plan comptable, balance, grand livre, compte de résultat.</p></div>`;
+}
+
+// Contrôle de gestion
+function vControl(){
+  return `<h2>Contrôle de gestion</h2><div class="infobox">Module en cours de développement.</div><div class="panel"><p>Indicateurs : CA, marge, résultats, objectifs mensuels.</p></div>`;
+}
+
+// Marketing
+function vMarketing(){
+  return `<h2>Marketing</h2><div class="infobox">Module en cours de développement.</div><div class="panel"><p>Gestion des campagnes, analyse ROI, ciblage clients.</p></div>`;
+}
+
+// RH
+function vHR(){
+  return `<h2>Ressources humaines</h2><div class="infobox">Module en cours de développement.</div><div class="panel"><p>Gestion des employés, contrats, salaires, congés.</p></div>`;
+}
+
+// Monitoring
+function vMonitoring(){
+  const month=monitorPeriod.from||monthKey();
+  const obj=S.objectives[month]||{};
+  const delivered=S.orders.filter(o=>o.status!=="cancelled"&&o.delivered&&monthKey(o.date)===month);
+  const caReal=delivered.reduce((a,o)=>a+orderTotal(o),0);
+  const ordersReal=delivered.length;
+  let encReal=0;
+  S.orders.forEach(o=>(o.payments||[]).forEach(p=>{ if(monthKey(p.date)===month) encReal+=p.amount; }));
+  return `<h2>Monitoring</h2><div class="panel"><div class="row"><div><label>Mois</label><input type="month" id="mo-month" value="${month}"></div><button class="btn sm" id="mo-apply">Appliquer</button></div></div><div class="grid2"><div class="panel"><h3>Objectifs pour ${month}</h3><label>CA objectif (F)</label><input id="obj-ca" type="number" value="${obj.ca||""}"><label>Commandes objectif</label><input id="obj-orders" type="number" value="${obj.orders||""}"><label>Encaissement objectif (F)</label><input id="obj-enc" type="number" value="${obj.encaissement||""}"><button class="btn" id="obj-save">Enregistrer</button></div><div class="panel"><h3>Réalisations ${month}</h3><table><tr><th>Indicateur</th><th>Réalisé</th><th>Objectif</th><th>Atteinte</th></tr><tr><td>CA</td><td class="num">${fmt(caReal)}</td><td class="num">${obj.ca?fmt(obj.ca):"—"}</td><td>${obj.ca?Math.round(caReal/obj.ca*100)+"%":"—"}</td></tr><tr><td>Commandes</td><td class="num">${ordersReal}</td><td class="num">${obj.orders||"—"}</td><td>${obj.orders?Math.round(ordersReal/obj.orders*100)+"%":"—"}</td></tr><tr><td>Encaissements</td><td class="num">${fmt(encReal)}</td><td class="num">${obj.encaissement?fmt(obj.encaissement):"—"}</td><td>${obj.encaissement?Math.round(encReal/obj.encaissement*100)+"%":"—"}</td></tr></table></div></div>`;
+}
+
+// Utilisateurs
+function vUsers(){
+  const eu=editUserId?S.users.find(u=>u.id===editUserId):null;
+  return `<h2>Utilisateurs</h2><div class="panel"><h3>${eu?"Modifier":"Nouvel utilisateur"}</h3><div class="grid2"><div><label>Nom</label><input id="u-name" value="${eu?esc(eu.name):""}"></div><div><label>Identifiant</label><input id="u-login" value="${eu?esc(eu.login):""}"></div><div><label>Rôle</label><select id="u-role"><option value="employee" ${eu?.role==="employee"?"selected":""}>Employé</option><option value="admin" ${eu?.role==="admin"?"selected":""}>Admin</option></select></div><div><label>Mot de passe ${eu?"(laisser vide)":""}</label><input id="u-pass" type="password"></div></div><div class="perms">${PERMS.map(([k,l])=>`<label><input type="checkbox" id="perm-${k}" ${eu?.perms?.[k]?"checked":""}> ${l}</label>`).join("")}</div><div class="row"><button class="btn" id="u-save">${eu?"Enregistrer":"Créer"}</button>${eu?'<button class="btn ghost" id="u-cancel">Annuler</button>':""}</div></div><div class="panel"><div class="tablewrap"><tr><th>Nom</th><th>Identifiant</th><th>Rôle</th><th>Statut</th><th></th></tr>${S.users.map(u=>`<tr><td><b>${esc(u.name)}</b></td><td>${u.login}</td><td>${u.role==="admin"?'<span class="badge admin">Admin</span>':'<span class="badge emp">Employé</span>'}</td><td>${u.active!==false?'<span class="badge ok">Actif</span>':'<span class="badge off">Désactivé</span>'}</td><td class="row"><button class="btn sm ghost" data-uedit="${u.id}">✎</button>${u.id!==me()?.id?`<button class="btn sm" style="background:var(--rouge)" data-utoggle="${u.id}">${u.active!==false?"Désactiver":"Activer"}</button>`:""}</td></tr>`).join("")}</div></div>`;
+}
+
+// Sauvegarde
+function vBackup(){
+  return `<h2>Sauvegarde</h2><div class="panel"><div class="row"><button class="btn" id="bk-export">Exporter JSON</button><button class="btn b" id="bk-csv">Exporter commandes CSV</button><button class="btn ghost" id="bk-import">Restaurer</button><input type="file" id="bk-file" accept=".json" style="display:none"></div></div><div class="panel"><p>${S.products.length} produits · ${S.clients.length} clients · ${S.orders.length} commandes · ${S.users.length} utilisateurs</p><button class="btn sm" style="background:var(--rouge)" id="bk-reset">Tout effacer</button></div>`;
+}
+
+// ==================== RENDU ====================
+function render(){
+  const root=el("root");
+  if(!root) return;
+  if(!S.users.length){ root.innerHTML=vSetup(); bindSetup(); return; }
+  if(!session){ root.innerHTML=vLogin(); bindLogin(); return; }
+  const views={dash:vDash, orders:vOrders, clients:vClients, products:vProducts, suppliers:vSuppliers, logistics:vLogistics, cash:vCash, accounting:vAccounting, control:vControl, marketing:vMarketing, hr:vHR, monitoring:vMonitoring, users:vUsers, backup:vBackup};
+  root.innerHTML=chrome(views[tab]());
+  bindApp();
+}
+
+// ==================== BINDINGS ====================
+function bindSetup(){
+  el("su-go").onclick=async()=>{
+    const name=el("su-name").value.trim(), login=el("su-login").value.trim().toLowerCase();
+    const p1=el("su-pass").value, p2=el("su-pass2").value;
+    if(!name||!login) return toast("Nom et identifiant requis");
+    if(p1.length<4) return toast("Mot de passe min 4 caractères");
+    if(p1!==p2) return toast("Mots de passe différents");
+    const salt=Math.random().toString(36).slice(2,10);
+    S.users.push({id:nid(), name, login, salt, hash:await sha256(salt+p1), role:"admin", perms:{}, active:true});
+    session={userId:S.users[0].id};
+    log("Compte admin créé");
+    await save(); await saveSession(); render(); toast("Bienvenue "+name);
   };
+}
 
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
-  const syncBadge = document.getElementById("sync-badge");
-
-  function updateSyncBadge(status) {
-    if (syncBadge) {
-      if (status === "syncing") {
-        syncBadge.textContent = "🔄 Syncing...";
-        syncBadge.style.background = "#C85E2D";
-      } else if (status === "offline") {
-        syncBadge.textContent = "⚠️ Offline";
-        syncBadge.classList.add("offline");
-      } else {
-        syncBadge.textContent = "☁️ Synced";
-        syncBadge.classList.remove("offline");
-        syncBadge.style.background = "var(--vert)";
-      }
-    }
-  }
-
-  // Stockage Firestore avec fallback localStorage
-  window.store = {
-    mode: "firestore",
-    async get(k) {
-      try {
-        const docRef = doc(db, "distrivia_data", k);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          return JSON.stringify(docSnap.data().payload);
-        }
-        const local = window.localStorage.getItem(k);
-        if (local) return local;
-        return null;
-      } catch (e) {
-        console.warn("Firestore read error, fallback to localStorage:", e);
-        updateSyncBadge("offline");
-        return window.localStorage.getItem(k);
-      }
-    },
-    async set(k, v) {
-      try {
-        window.localStorage.setItem(k, v);
-        const docRef = doc(db, "distrivia_data", k);
-        await setDoc(docRef, {
-          payload: JSON.parse(v),
-          updatedAt: serverTimestamp()
-        });
-        updateSyncBadge("synced");
-      } catch (e) {
-        console.error("Firestore write error:", e);
-        updateSyncBadge("offline");
-        toast("⚠️ Connexion Cloud perdue - données sauvegardées localement");
-        throw e;
-      }
-    },
-    async del(k) {
-      window.localStorage.removeItem(k);
-      try {
-        const docRef = doc(db, "distrivia_data", k);
-        await deleteDoc(docRef);
-      } catch (e) {
-        console.warn("Firestore delete error:", e);
-      }
-    }
+function bindLogin(){
+  const go=async()=>{
+    const login=el("lg-login").value.trim().toLowerCase(), pass=el("lg-pass").value;
+    const u=S.users.find(u=>u.login===login);
+    if(!u) return toast("Identifiant inconnu");
+    if(u.active===false) return toast("Compte désactivé");
+    const h=await sha256(u.salt+pass);
+    if(h!==u.hash) return toast("Mot de passe incorrect");
+    session={userId:u.id};
+    log("Connexion");
+    await save(); await saveSession(); tab="dash"; render(); toast("Bonjour "+u.name);
   };
+  el("lg-go").onclick=go;
+  el("lg-pass").onkeydown=e=>{if(e.key==="Enter") go();};
+}
 
-  // Variables globales
-  let S = { version:5, users:[], products:[], clients:[], orders:[], expenses:[], suppliers:[], purchases:[], campaigns:[], employees:[], objectives:{}, logs:[], seq:1, orderSeq:1, poSeq:1 };
-  let session = null;
-  let tab = "dash";
-  let draft = null;
-  let editUserId = null;
-  let editOrder = null;
-  let editClientId = null;
-  let editSupplierId = null;
-  let editCampaignId = null;
-  let editEmployeeId = null;
-  let modalContent = null;
-  let searchQ = "";
-  let acctPeriod = { from:"", to:"" };
-  let ctrlPeriod = { from:"", to:"" };
-  let cashPeriod = { from:"", to:"" };
-  let monitorPeriod = { from:"", to:"" };
-  let unsubscribeSnapshot = null;
-
-  const KEY = "distrivia-erp-v1";
-  const KEY_SESSION = "distrivia-session";
-
-  // Helper functions
-  const fmt = n => (Math.round(n)||0).toLocaleString("fr-FR") + " F";
-  const today = () => new Date().toISOString().slice(0,10);
-  const now = () => new Date().toISOString().slice(0,16).replace("T"," ");
-  const monthKey = d => (d||today()).slice(0,7);
-  const el = id => document.getElementById(id);
-  const esc = s => String(s??"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function bindApp(){
+  // Navigation
+  document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{ tab=b.dataset.tab; searchQ=""; render(); });
+  el("logout").onclick=async()=>{ log("Déconnexion"); await save(); session=null; await saveSession(); render(); };
+  el("myprofile").onclick=()=>toast("Fonction profil à venir");
   
-  function toast(msg){ 
-    const t = el("toast"); 
-    t.textContent = msg; 
-    t.style.display = "block"; 
-    setTimeout(()=>t.style.display="none", 2400); 
+  // Recherche
+  const gs=el("globalsearch");
+  if(gs){
+    gs.oninput=()=>{ searchQ=gs.value; const div=el("hsearch-results"); if(searchQ.trim().length>=2){ div.innerHTML=globalSearchHTML(); div.classList.add("show"); bindSearchItems(); }else{ div.classList.remove("show"); } };
+    document.addEventListener("click",e=>{ if(!e.target.closest(".hsearch")) el("hsearch-results")?.classList.remove("show"); });
   }
   
-  function nid(){ return S.seq++; }
-
-  async function sha256(txt){
-    if (window.crypto && crypto.subtle) {
-      const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(txt));
-      return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
-    }
-    let h = 0; for (let i=0;i<txt.length;i++){ h = (h*31 + txt.charCodeAt(i))|0; } 
-    return "x"+(h>>>0).toString(16);
-  }
-  
-  const me = () => S.users.find(u=>u.id===session?.userId) || null;
-  const isAdmin = () => me()?.role === "admin";
-  const can = p => isAdmin() || !!me()?.perms?.[p];
-  
-  function log(action){
-    S.logs.unshift({ d: now(), u: me()?.name || "—", a: action });
-    if (S.logs.length > 300) S.logs.length = 300;
-  }
-
-  async function save(){
-    try{ 
-      await window.store.set(KEY, JSON.stringify(S)); 
-    } catch(e){ 
-      toast("⚠️ Échec de la sauvegarde Cloud"); 
-    }
-  }
-  
-  async function saveSession(){
-    if (session) await window.store.set(KEY_SESSION, JSON.stringify(session));
-    else await window.store.del(KEY_SESSION);
-  }
-
-  // Migration des données
-  function migrate(){
-    if (!S.version || S.version < 2) {
-      S.version = 2; S.users = S.users||[]; S.logs = S.logs||[]; S.orderSeq = S.orderSeq||1;
-      (S.orders||[]).forEach(o=>{
-        if(!o.num) o.num = "CMD-" + String(S.orderSeq++).padStart(4,"0");
-        if(!o.payments){
-          const tot = o.lines.reduce((a,l)=>a+l.qty*l.price,0);
-          o.payments = (o.status==="paid") ? [{id:nid(), date:o.paidDate||o.date, amount:tot, by:"—"}] : [];
-        }
-      });
-    }
-    if (!S.version || S.version < 3) {
-      S.version = 3; S.suppliers = S.suppliers||[]; S.purchases = S.purchases||[]; S.poSeq = S.poSeq||1;
-      (S.orders||[]).forEach(o=>{
-        if(o.delivered===undefined) o.delivered = (o.status==="delivered"||o.status==="paid");
-        if(o.payments) o.payments.forEach(p=>{ if(!p.method) p.method="Espèces"; });
-        if(o.dueDate===undefined) o.dueDate = null;
-      });
-    }
-    if (!S.version || S.version < 4) {
-      S.version = 4; S.campaigns = S.campaigns||[]; S.employees = S.employees||[];
-      (S.clients||[]).forEach(c=>{
-        if(c.dial===undefined){
-          let raw = (c.phone||"").trim();
-          let dial="+221", local=raw;
-          const m = raw.match(/^(\+\d{1,4})[\s.-]*(.*)$/);
-          if(m){ dial=m[1].replace(/\s/g,""); local=m[2]; }
-          c.dial = dial; c.local = (local||"").replace(/[^\d]/g,"");
-          c.phone = c.local ? (c.dial+" "+c.local) : "";
-        }
-      });
-    }
-    if (!S.version || S.version < 5) {
-      S.version = 5; S.objectives = S.objectives || {}; S.campaigns = S.campaigns || []; S.employees = S.employees || [];
-    }
-    if (S.orderSeq === undefined) S.orderSeq = (S.orders?.length||0)+1;
-    if (S.poSeq === undefined) S.poSeq = (S.purchases?.length||0)+1;
-  }
-
-  // Constantes métier
-  const FAMILIES = ["Restauration & take-away","Hygiène & entretien","Médical","Événementiel","Écologique","Consommables informatiques","Matériel de bureau","Mobilier de bureau"];
-  const CLIENT_TYPES = ["Dibiterie / gargote","Restaurant / fast-food","Traiteur / événementiel","Boulangerie","Boutique revendeuse","Clinique / pharmacie","Hôtel","Entreprise / école","Autre"];
-  const PERMS = [
-    ["orders_create","Créer des commandes"],["orders_edit","Modifier les commandes"],["orders_cancel","Annuler les commandes"],
-    ["orders_deliver","Livrer les commandes"],["orders_pay","Encaisser les paiements"],["clients_manage","Ajouter / modifier les clients"],
-    ["clients_edit","Modifier les clients existants"],["products_manage","Gérer les produits et prix"],["stock_receive","Réceptionner du stock"],
-    ["cash_view","Voir la caisse et les soldes"],["cash_expense","Enregistrer des dépenses"],["suppliers","Gérer les fournisseurs et achats"],
-    ["accounting","Voir la comptabilité (SYSCOHADA)"],["control","Voir le contrôle de gestion"],["logistics","Gérer la logistique et les livraisons"],
-    ["marketing","Voir et gérer le marketing"],["hr","Voir et gérer les ressources humaines"],["monitoring","Voir le monitoring et les objectifs"],
-  ];
-  const COUNTRY_CODES = [
-    ["+221","🇸🇳 Sénégal"],["+223","🇲🇱 Mali"],["+225","🇨🇮 Côte d'Ivoire"],["+222","🇲🇷 Mauritanie"],
-    ["+224","🇬🇳 Guinée"],["+226","🇧🇫 Burkina"],["+227","🇳🇪 Niger"],["+228","🇹🇬 Togo"],["+229","🇧🇯 Bénin"],
-    ["+233","🇬🇭 Ghana"],["+234","🇳🇬 Nigéria"],["+212","🇲🇦 Maroc"],["+216","🇹🇳 Tunisie"],["+33","🇫🇷 France"],
-    ["+86","🇨🇳 Chine"],["+90","🇹🇷 Turquie"],["+1","🇺🇸 USA/Canada"],["+44","🇬🇧 UK"],["+971","🇦🇪 Émirats"],
-  ];
-  const CHANNELS = ["WhatsApp","SMS","Facebook","Instagram","Terrain / visite","Affichage","Radio","Bouche à oreille","Autre"];
-  const HR_CONTRACTS = ["CDI","CDD","Stage","Prestation","Journalier"];
-  const HR_DEPARTMENTS = ["Direction","Commercial","Logistique / entrepôt","Administratif / finance","Marketing","Livraison"];
-  const PAY_METHODS = ["Espèces","Wave","Orange Money","Virement bancaire","Chèque"];
-  const SUPPLIER_ZONES = ["Chine","Turquie","Maroc","Local Sénégal","Autre"];
-  const COA = [
-    ["411","Clients","actif"],["401","Fournisseurs","passif"],["521","Banque","actif"],["571","Caisse","actif"],
-    ["311","Stocks de marchandises","actif"],["701","Ventes de marchandises","produit"],["601","Achats de marchandises","charge"],
-    ["6031","Variation de stocks","charge"],["612","Transport","charge"],["622","Locations (loyer)","charge"],
-    ["627","Services bancaires","charge"],["641","Impôts et taxes","charge"],["661","Charges de personnel","charge"],
-    ["627p","Publicité / marketing","charge"],["646","Charges diverses","charge"],["443","TVA facturée","passif"],
-  ];
-
-  // Calculs métier
-  const orderTotal = o => o.lines.reduce((a,l)=>a+l.qty*l.price,0);
-  const orderPaid = o => (o.payments||[]).reduce((a,p)=>a+p.amount,0);
-  const orderDue = o => Math.max(0, orderTotal(o) - orderPaid(o));
-  const orderCost = o => o.lines.reduce((a,l)=>{ const p=S.products.find(p=>p.id===l.productId); return a+l.qty*(p?p.cost:0); },0);
-  const clientName = id => S.clients.find(c=>c.id===id)?.name || "—";
-  const prodName = id => S.products.find(p=>p.id===id)?.name || "—";
-  const normPhone = (dial, local) => (local||"").replace(/[^\d]/g,"");
-  const fullPhone = c => c.local ? (c.dial+" "+c.local) : "";
-  
-  function phoneExists(dial, local, exceptId){
-    const n = normPhone(dial, local); if(!n) return false;
-    return S.clients.some(c=> c.id!==exceptId && c.dial===dial && normPhone(c.dial,c.local)===n);
-  }
-
-  function refreshStatus(o){
-    if (o.status==="cancelled") return;
-    if (!o.delivered) o.status = "pending";
-    else o.status = orderDue(o) <= 0 ? "paid" : "delivered";
-  }
-
-  function deliveryLabel(o){
-    if(o.status==="cancelled") return '<span class="badge off">Annulée</span>';
-    return o.delivered ? '<span class="badge delivered">Livrée</span>' : '<span class="badge pending">Non livrée</span>';
-  }
-  
-  function payLabel(o){
-    if(o.status==="cancelled") return "—";
-    const due=orderDue(o);
-    if(due<=0) return '<span class="badge paid">Payée</span>';
-    if(orderPaid(o)>0) return '<span class="badge credit">Partiel</span>';
-    return '<span class="badge pending">Impayée</span>';
-  }
-
-  function kpis(){
-    const m = monthKey();
-    const live = S.orders.filter(o=>o.status!=="cancelled");
-    const delivered = live.filter(o=>o.status!=="pending");
-    const caMonth = delivered.filter(o=>monthKey(o.date)===m).reduce((a,o)=>a+orderTotal(o),0);
-    const margeMonth = delivered.filter(o=>monthKey(o.date)===m).reduce((a,o)=>a+orderTotal(o)-orderCost(o),0);
-    let encMonth=0, cashIn=0;
-    live.forEach(o=>(o.payments||[]).forEach(p=>{ cashIn+=p.amount; if(monthKey(p.date)===m) encMonth+=p.amount; }));
-    const credit = delivered.reduce((a,o)=>a+orderDue(o),0);
-    const activeClients = new Set(live.filter(o=>monthKey(o.date)===m).map(o=>o.clientId)).size;
-    const alerts = S.products.filter(p=>p.stock<=p.alert);
-    const stockValue = S.products.reduce((a,p)=>a+p.stock*p.cost,0);
-    const cashOut = S.expenses.reduce((a,e)=>a+e.amount,0);
-    return {caMonth, margeMonth, encMonth, credit, activeClients, alerts, stockValue, solde:cashIn-cashOut};
-  }
-
-  // Vues simplifiées
-  function vSetup(){
-    return `<div class="login">
-      <div class="wordmark">DISTRIVIA</div><div class="bar"></div><div class="sub">DISTRIBUTION GROUP</div>
-      <h2 style="text-align:center;margin-top:16px">Première utilisation</h2>
-      <p class="muted" style="text-align:center">Créez le compte administrateur (fondateur).</p>
-      <label>Nom complet</label><input id="su-name" placeholder="Ex. Ablaye Mbow">
-      <label>Identifiant de connexion</label><input id="su-login" placeholder="Ex. ablaye" autocomplete="username">
-      <label>Mot de passe</label><input id="su-pass" type="password" autocomplete="new-password">
-      <label>Confirmer le mot de passe</label><input id="su-pass2" type="password" autocomplete="new-password">
-      <button class="btn" id="su-go" style="width:100%;margin-top:14px">Créer le compte administrateur</button>
-    </div>`;
-  }
-  
-  function vLogin(){
-    return `<div class="login">
-      <div class="wordmark">DISTRIVIA</div><div class="bar"></div><div class="sub">DISTRIBUTION GROUP</div>
-      <h2 style="text-align:center;margin-top:16px">Connexion</h2>
-      <label>Identifiant</label><input id="lg-login" autocomplete="username">
-      <label>Mot de passe</label><input id="lg-pass" type="password" autocomplete="current-password">
-      <button class="btn" id="lg-go" style="width:100%;margin-top:14px">Se connecter</button>
-      <p class="muted" style="margin-top:12px;text-align:center">Compte créé par l'administrateur de DISTRIVIA.</p>
-    </div>`;
-  }
-
-  function chrome(content){
-    const u = me();
-    const tabs = [
-      ["dash","Tableau de bord",true],["orders","Commandes",true],["clients","Clients",true],
-      ["products","Produits & Stock",true],["suppliers","Fournisseurs",can("suppliers")],
-      ["logistics","Logistique",can("logistics")],["cash","Caisse",can("cash_view")],
-      ["accounting","Comptabilité",can("accounting")],["control","Contrôle de gestion",can("control")],
-      ["marketing","Marketing",can("marketing")],["hr","Ressources humaines",can("hr")],
-      ["monitoring","Monitoring",can("monitoring")],["users","Utilisateurs",isAdmin()],
-      ["backup","Sauvegarde",isAdmin()],
-    ];
-    return `
-    <header>
-      <div class="brand"><div class="wordmark">DISTRIVIA</div><div class="bar"></div><div class="sub">DISTRIBUTION GROUP</div></div>
-      <div class="hsearch">
-        <input id="globalsearch" placeholder="Rechercher un client, un téléphone, un n° de commande…" value="${esc(searchQ)}" autocomplete="off">
-        <div class="hsearch-results ${searchQ.trim().length>=2?"show":""}" id="hsearch-results">${searchQ.trim().length>=2?globalSearchHTML():""}</div>
-      </div>
-      <div class="uzone"><span>👤 <b>${esc(u.name)}</b> ${u.role==="admin"?'<span class="badge admin">Admin</span>':'<span class="badge emp">Employé</span>'}</span>
-      <button class="btn sm ghost" id="myprofile">Mon profil</button>
-      <button class="btn sm ghost" id="logout">Déconnexion</button></div>
-    </header>
-    <nav>${tabs.filter(t=>t[2]).map(t=>`<button data-tab="${t[0]}" class="${tab===t[0]?"active":""}">${t[1]}</button>`).join("")}</nav>
-    <main>${content}</main>`;
-  }
-
-  function globalSearchHTML(){
-    const q = searchQ.trim().toLowerCase(); if (q.length < 2) return "";
-    const qd = q.replace(/\s/g,"");
-    const cs = S.clients.filter(c => c.name.toLowerCase().includes(q) || (c.phone||"").replace(/\s/g,"").includes(qd)).slice(0,6);
-    const os = S.orders.filter(o => o.num.toLowerCase().includes(q) || clientName(o.clientId).toLowerCase().includes(q)).slice(0,6);
-    const ps = S.products.filter(p => p.name.toLowerCase().includes(q)).slice(0,5);
-    if (!cs.length && !os.length && !ps.length) return `<div class="hsr-empty">Aucun résultat pour « ${esc(searchQ)} »</div>`;
-    let h = "";
-    if(cs.length){ h += `<div class="hsr-cat">Clients</div>` + cs.map(c=>{
-      const cr = S.orders.filter(o=>o.clientId===c.id && o.status==="delivered").reduce((a,o)=>a+orderDue(o),0);
-      return `<div class="hsr-item" data-goclient="${c.id}"><b>${esc(c.name)}</b> · ${esc(fullPhone(c)||"—")} · ${esc(c.zone||"")}${cr?` <span style="color:var(--terra)">— doit ${fmt(cr)}</span>`:""}</div>`;
-    }).join(""); }
-    if(os.length){ h += `<div class="hsr-cat">Commandes</div>` + os.map(o=>{
-      const due=orderDue(o);
-      return `<div class="hsr-item" data-goorder="${o.id}"><b>${esc(o.num)}</b> · ${esc(clientName(o.clientId))} · ${fmt(orderTotal(o))}${due?` <span style="color:var(--terra)">— reste ${fmt(due)}</span>`:` <span style="color:var(--vert)">— soldée</span>`}</div>`;
-    }).join(""); }
-    if(ps.length){ h += `<div class="hsr-cat">Produits</div>` + ps.map(p=>
-      `<div class="hsr-item" data-goproduct="1"><b>${esc(p.name)}</b> · ${esc(p.family)} · stock ${p.stock} · ${fmt(p.price)}</div>`
-    ).join(""); }
-    return h;
-  }
-
-  function orderRow(o){
-    const due = orderDue(o); let act = "";
-    if (o.status!=="cancelled") {
-      if (!o.delivered && can("orders_deliver")) act += `<button class="btn sm b" data-deliver="${o.id}">Livrer</button> `;
-      if (due>0 && can("orders_pay")) act += `<button class="btn sm" data-quickpay="${o.id}">Encaisser</button> `;
-      if (can("orders_edit")) act += `<button class="btn sm ghost" data-oedit="${o.id}">Modifier</button> `;
-      act += `<button class="btn sm ghost" data-oreceipt="${o.id}">Reçu</button> `;
-      if (can("orders_cancel")) act += `<button class="btn sm" style="background:var(--rouge)" data-ocancel="${o.id}">Annuler</button>`;
-    } else { act = `<span class="muted">${esc(o.cancelReason||"annulée")}</span>`; }
-    const overdue = o.payMode==="credit" && o.dueDate && due>0 && o.dueDate < today();
-    const dueCell = due&&o.status!=="cancelled" ? '<b style="color:var(--terra)">'+fmt(due)+'</b>'+(overdue?' <span class="badge alert">échue</span>':o.dueDate?' <span class="muted">éch. '+o.dueDate+'</span>':'') : "—";
-    return `<tr${o.__hl?' style="background:#FFF7E6"':''}><td><b><a href="#" data-odetail="${o.id}" style="color:var(--bleu);text-decoration:underline;cursor:pointer">${esc(o.num)}</a></b></td><td>${o.date}</td>
-    <td><a href="#" data-cdetail="${o.clientId}" style="color:var(--anthra);cursor:pointer">${esc(clientName(o.clientId))}</a></td>
-    <td class="num">${fmt(orderTotal(o))}</td><td class="num">${dueCell}</td><td>${deliveryLabel(o)}</td><td>${payLabel(o)}</td><td>${act}</td></tr>`;
-  }
-  
-  function orderTableHead(){
-    return `<tr><th>N°</th><th>Date</th><th>Client</th><th class="num">Total</th><th class="num">Reste dû</th><th>Livraison</th><th>Paiement</th><th></th></tr>`;
-  }
-
-  function vDash(){
-    const k = kpis();
-    const toDeliver = S.orders.filter(o=>o.status!=="cancelled" && !o.delivered);
-    const toCollect = S.orders.filter(o=>o.status!=="cancelled" && o.delivered && orderDue(o)>0);
-    const overdue = toCollect.filter(o=>o.payMode==="credit" && o.dueDate && o.dueDate<today());
-    return `
-    <h2>Tableau de bord — ${new Date().toLocaleDateString("fr-FR",{month:"long",year:"numeric"})}</h2>
-    <div class="cards">
-      <div class="card"><div class="v">${fmt(k.caMonth)}</div><div class="l">CA du mois (livré)</div></div>
-      <div class="card g"><div class="v">${fmt(k.margeMonth)}</div><div class="l">Marge brute du mois</div></div>
-      <div class="card"><div class="v">${fmt(k.encMonth)}</div><div class="l">Encaissé ce mois</div></div>
-      <div class="card t"><div class="v">${fmt(k.credit)}</div><div class="l">Crédit client en cours</div></div>
-      <div class="card"><div class="v">${fmt(k.stockValue)}</div><div class="l">Valeur du stock (coût)</div></div>
-      <div class="card ${k.solde<0?'r':'g'}"><div class="v">${fmt(k.solde)}</div><div class="l">Solde de caisse</div></div>
-    </div>
-    ${overdue.length?`<div class="alertbox"><b>⏰ ${overdue.length} crédit(s) échu(s) :</b> ${overdue.slice(0,5).map(o=>esc(o.num)+" — "+esc(clientName(o.clientId))+" ("+fmt(orderDue(o))+", éch. "+o.dueDate+")").join(" · ")} — relancer les clients.</div>`:""}
-    ${k.alerts.length?`<div class="alertbox"><b>⚠ Stock bas :</b> ${k.alerts.map(p=>esc(p.name)+" ("+p.stock+")").join(" · ")} — réassort à anticiper.</div>`:""}
-    <div class="grid2">
-      <div class="panel"><h3>Chiffre d'affaires — 6 derniers mois</h3><canvas id="ch-ca" height="150"></canvas></div>
-      <div class="panel"><h3>Répartition du CA par famille</h3><canvas id="ch-fam" height="150"></canvas></div>
-    </div>
-    <div class="grid2">
-      <div class="panel"><h3>Top 5 clients (CA)</h3><canvas id="ch-cli" height="150"></canvas></div>
-      <div class="panel"><h3>Encaissé vs Dépensé — 6 mois</h3><canvas id="ch-cash" height="150"></canvas></div>
-    </div>
-    ${toCollect.length?`<div class="panel"><h3>À encaisser (${toCollect.length})</h3><div class="tablewrap"><table>${orderTableHead()}${toCollect.map(o=>orderRow(o)).join("")}</table></div></div>`:""}
-    ${toDeliver.length?`<div class="panel"><h3>À livrer (${toDeliver.length})</h3><div class="tablewrap"><table>${orderTableHead()}${toDeliver.map(o=>orderRow(o)).join("")}</table></div></div>`:""}`;
-  }
-
-  function vOrders(){
-    const h = can("orders_create") ? `<div class="panel"><button class="btn" id="o-new">🛒 Nouvelle commande</button></div>` : "";
-    const live = [...S.orders].sort((a,b)=>b.id-a.id);
-    return `<h2>Commandes</h2>${h}
-    <div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">Historique (${S.orders.length})</h3>
-    <div class="row"><button class="btn sm b" id="exp-orders-xlsx">Excel</button><button class="btn sm ghost" id="exp-orders-csv">CSV</button><button class="btn sm ghost" id="exp-orders-pdf">PDF</button></div></div>
-    <div class="tablewrap"><td>${orderTableHead()}${live.length? live.map(o=>orderRow(o)).join("") : `<tr><td colspan="7" class="empty">Aucune commande.</td></tr>`}</table></div></div>`;
-  }
-
-  function vClients(){
-    const ec = editClientId ? S.clients.find(c=>c.id===editClientId) : null;
-    const cm = can("clients_manage");
-    return `<h2>Clients</h2>
-    ${(cm||ec)?`<div class="panel"><h3>${ec?"Modifier le client : "+esc(ec.name):"Nouveau client"}</h3>
-      <div class="grid2">
-        <div><label>Nom / établissement</label><input id="c-name" value="${ec?esc(ec.name):""}" placeholder="Ex. Dibiterie Chez Modou"></div>
-        <div><label>Type</label><select id="c-type">${CLIENT_TYPES.map(t=>`<option ${ec&&ec.type===t?"selected":""}>${t}</option>`).join("")}</select></div>
-        <div><label>Zone / quartier</label><input id="c-zone" value="${ec?esc(ec.zone):""}" placeholder="Ex. Pikine"></div>
-        <div><label>Code pays</label><select id="c-dial">${COUNTRY_CODES.map(([code,lbl])=>`<option value="${code}" ${ec&&ec.dial===code?"selected":(!ec&&code==="+221"?"selected":"")}>${lbl} (${code})</option>`).join("")}</select></div>
-        <div><label>Numéro de téléphone (unique)</label><input id="c-local" value="${ec?esc(ec.local||""):""}" placeholder="77 764 88 24" inputmode="numeric"></div>
-      </div>
-      <div class="row" style="margin-top:10px"><button class="btn" id="c-add">${ec?"Enregistrer les modifications":"Ajouter le client"}</button>${ec?'<button class="btn ghost" id="c-cancel">Annuler</button>':""}</div>
-    </div>`:""}
-    <div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">Base clientèle (${S.clients.length})</h3>
-      <div class="row"><button class="btn sm b" id="exp-clients-xlsx">Excel</button><button class="btn sm ghost" id="exp-clients-csv">CSV</button></div></div>
-    <div class="tablewrap"><tr>
-      <tr><th>Client</th><th>Type</th><th>Zone</th><th>Téléphone</th><th class="num">CA total</th><th class="num">Crédit en cours</th>${cm?"<th></th>":""}</tr>
-      ${S.clients.length? S.clients.map(c=>{
-        const co = S.orders.filter(o=>o.clientId===c.id && o.status!=="cancelled");
-        const ca = co.filter(o=>o.status!=="pending").reduce((a,o)=>a+orderTotal(o),0);
-        const cr = co.filter(o=>o.status==="delivered").reduce((a,o)=>a+orderDue(o),0);
-        return `<tr><td><b><a href="#" data-cdetail="${c.id}" style="color:var(--bleu);text-decoration:underline;cursor:pointer">${esc(c.name)}</a></b></td>
-        <td class="muted">${esc(c.type)}</td><td>${esc(c.zone)}</td><td>${esc(fullPhone(c))}</td>
-        <td class="num">${fmt(ca)}</td><td class="num">${cr?'<span class="badge credit">'+fmt(cr)+'</span>':'—'}</td>
-        ${cm?`<td class="row"><button class="btn sm ghost" data-cdetail="${c.id}">Détails</button><button class="btn sm ghost" data-cedit="${c.id}">Modifier</button><button class="del" data-delc="${c.id}" title="Supprimer">✕</button></td>`:""}</tr>`;
-      }).join("") : `<tr><td colspan="7" class="empty">Aucun client.</td></tr>`}
-    </table></div></div>`;
-  }
-
-  function vProducts(){
-    const pm = can("products_manage"), sr = can("stock_receive");
-    return `<h2>Produits & Stock</h2>
-    ${pm?`<div class="panel"><h3>Ajouter un produit</h3>
-      <div class="grid2">
-        <div><label>Nom du produit</label><input id="p-name" placeholder="Ex. Boîte kraft 1000 ml (carton de 300)"></div>
-        <div><label>Famille</label><select id="p-fam">${FAMILIES.map(f=>`<option>${f}</option>`).join("")}</select></div>
-        <div><label>Coût de revient / carton (FCFA)</label><input id="p-cost" type="number" min="0" placeholder="9500"></div>
-        <div><label>Prix de vente / carton (FCFA)</label><input id="p-price" type="number" min="0" placeholder="12500"></div>
-        <div><label>Stock initial (cartons)</label><input id="p-stock" type="number" min="0" value="0"></div>
-        <div><label>Seuil d'alerte</label><input id="p-alert" type="number" min="0" value="20"></div>
-      </div>
-      <div class="row" style="margin-top:10px"><button class="btn" id="p-add">Ajouter le produit</button>
-      <span class="muted">Coût de revient = rendu entrepôt Dakar (achat + fret + douane).</span></div>
-    </div>`:""}
-    <div class="panel"><div class="tablewrap"><table>
-      <tr><th>Produit</th><th>Famille</th><th class="num">Coût</th><th class="num">Prix</th><th class="num">Marge</th><th class="num">Stock</th><th>État</th>${sr?"<th>Réception</th>":""}${pm?"<th></th>":""}</tr>
-      ${S.products.length? S.products.map(p=>{
-        const mg = p.price? Math.round((p.price-p.cost)/p.price*100):0;
-        return `<tr><td><b>${esc(p.name)}</b></td><td class="muted">${esc(p.family)}</td>
-        <td class="num">${fmt(p.cost)}</td><td class="num">${fmt(p.price)}</td><td class="num">${mg} %</td>
-        <td class="num"><b>${p.stock}</b></td>
-        <td>${p.stock<=p.alert?'<span class="badge alert">BAS</span>':'<span class="badge ok">OK</span>'}</td>
-        ${sr?`<td><div class="row"><input type="number" min="1" style="width:64px" id="rcv-${p.id}" placeholder="qté"><button class="btn sm b" data-rcv="${p.id}">+ Stock</button></div></td>`:""}
-        ${pm?`<td><button class="del" data-delp="${p.id}" title="Supprimer">✕</button></td>`:""}</tr>`;
-      }).join("") : `<tr><td colspan="9" class="empty">Aucun produit.</td></tr>`}
-    </table></div></div>`;
-  }
-
-  // Chargement principal avec écoute Firestore
-  window.loadAll = async function() {
-    try {
-      const raw = await window.store.get(KEY);
-      if(raw) S = JSON.parse(raw);
-    } catch(e) {}
-    migrate();
-    try {
-      const rs = await window.store.get(KEY_SESSION);
-      if(rs) session = JSON.parse(rs);
-    } catch(e) {}
-    if (session && !me()) session = null;
-    render();
-
-    if (unsubscribeSnapshot) unsubscribeSnapshot();
-    const docRef = doc(db, "distrivia_data", KEY);
-    unsubscribeSnapshot = onSnapshot(docRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const cloudData = docSnap.data().payload;
-        if (JSON.stringify(cloudData) !== JSON.stringify(S)) {
-          S = cloudData;
-          migrate();
-          render();
-          updateSyncBadge("synced");
-          toast("📡 Données synchronisées en temps réel");
-        }
-      }
-    }, (error) => {
-      console.error("Firestore snapshot error:", error);
-      updateSyncBadge("offline");
-    });
+  // Produits
+  if(el("p-add")) el("p-add").onclick=async()=>{
+    const name=el("p-name").value.trim(); if(!name) return toast("Nom requis");
+    S.products.push({id:nid(), name, family:el("p-fam").value, cost:+el("p-cost").value||0, price:+el("p-price").value||0, stock:+el("p-stock").value||0, alert:+el("p-alert").value||20});
+    log("Produit ajouté: "+name); await save(); render(); toast("Produit ajouté");
   };
-
-  // Rendu principal
-  function render(){
-    const root = el("root");
-    if (!S.users.length) { root.innerHTML = vSetup(); bindSetup(); return; }
-    if (!session || !me()) { root.innerHTML = vLogin(); bindLogin(); return; }
-    const views = {dash:vDash, orders:vOrders, clients:vClients, products:vProducts, suppliers:()=>"<h2>Fournisseurs</h2><p>Module en cours...</p>", logistics:()=>"<h2>Logistique</h2><p>Module en cours...</p>", cash:()=>"<h2>Caisse</h2><p>Module en cours...</p>", accounting:()=>"<h2>Comptabilité</h2><p>Module en cours...</p>", control:()=>"<h2>Contrôle de gestion</h2><p>Module en cours...</p>", marketing:()=>"<h2>Marketing</h2><p>Module en cours...</p>", hr:()=>"<h2>RH</h2><p>Module en cours...</p>", monitoring:()=>"<h2>Monitoring</h2><p>Module en cours...</p>", users:vUsers, backup:()=>"<h2>Sauvegarde</h2><button class='btn' id='bk-export'>Exporter</button>"};
-    const guard = {cash:"cash_view", suppliers:"suppliers", accounting:"accounting", control:"control", logistics:"logistics", marketing:"marketing", hr:"hr", monitoring:"monitoring"};
-    if (guard[tab] && !can(guard[tab])) tab="dash";
-    if ((tab==="users"||tab==="backup") && !isAdmin()) tab = "dash";
-    root.innerHTML = chrome(views[tab]());
-    bindApp();
-    if (tab==="dash") setTimeout(drawCharts, 30);
-  }
-
-  function drawCharts(){
-    if(typeof Chart==="undefined") return;
-    const months = (()=>{ const arr=[]; const d=new Date(); for(let i=5;i>=0;i--){ const x=new Date(d.getFullYear(),d.getMonth()-i,1); arr.push(x.toISOString().slice(0,7)); } return arr; })();
-    const lbl=months.map(m=>{const [y,mo]=m.split("-");return ["jan","fév","mar","avr","mai","jun","jul","aoû","sep","oct","nov","déc"][+mo-1]+" "+y.slice(2);});
-    const live=S.orders.filter(o=>o.status!=="cancelled");
-    const caM=months.map(m=>live.filter(o=>o.delivered&&monthKey(o.date)===m).reduce((a,o)=>a+orderTotal(o),0));
-    const ctx1=el("ch-ca"); if(ctx1) new Chart(ctx1,{type:"bar",data:{labels:lbl,datasets:[{label:"CA",data:caM,backgroundColor:"#0F2A4A"}]},options:{responsive:true,maintainAspectRatio:true}});
-  }
-
-  // Bindings simplifiés
-  function bindSetup(){
-    el("su-go").onclick = async ()=>{
-      const name = el("su-name").value.trim(), login = el("su-login").value.trim().toLowerCase();
-      const p1 = el("su-pass").value, p2 = el("su-pass2").value;
-      if(!name||!login) return toast("Nom et identifiant requis");
-      if(p1.length<4) return toast("Mot de passe : 4 caractères minimum");
-      if(p1!==p2) return toast("Les mots de passe ne correspondent pas");
-      const salt = Math.random().toString(36).slice(2,10);
-      S.users.push({ id:nid(), name, login, salt, hash:await sha256(salt+p1), role:"admin", perms:{}, active:true });
-      session = { userId:S.users[0].id };
-      log("Compte administrateur créé");
-      await save(); await saveSession(); render(); toast("Bienvenue, "+name+" ✓");
-    };
-  }
-
-  function bindLogin(){
-    const go = async ()=>{
-      const login = el("lg-login").value.trim().toLowerCase(), pass = el("lg-pass").value;
-      const u = S.users.find(u=>u.login===login);
-      if(!u) return toast("Identifiant inconnu");
-      if(u.active===false) return toast("Compte désactivé — voir l'administrateur");
-      const h = await sha256(u.salt+pass);
-      if(h!==u.hash) return toast("Mot de passe incorrect");
-      session = { userId:u.id };
-      log("Connexion");
-      await save(); await saveSession(); tab="dash"; render(); toast("Bonjour "+u.name+" 👋");
-    };
-    el("lg-go").onclick = go;
-    el("lg-pass").onkeydown = e=>{ if(e.key==="Enter") go(); };
-  }
-
-  function bindApp(){
-    document.querySelectorAll("nav button").forEach(b=> b.onclick = ()=>{ tab=b.dataset.tab; searchQ=""; render(); });
-    el("logout").onclick = async ()=>{ log("Déconnexion"); await save(); session=null; await saveSession(); render(); };
-    const mp = el("myprofile"); if(mp) mp.onclick = ()=>{ toast("Fonction profil à venir"); };
-    
-    const gs = el("globalsearch"); const gsr = el("hsearch-results");
-    if(gs && gsr){
-      const renderDrop = ()=>{
-        searchQ = gs.value;
-        if(searchQ.trim().length>=2){ gsr.innerHTML = globalSearchHTML(); gsr.classList.add("show"); bindSearchItems(); }
-        else { gsr.innerHTML = ""; gsr.classList.remove("show"); }
-      };
-      gs.oninput = renderDrop;
-      gs.onfocus = ()=>{ if(searchQ.trim().length>=2) gsr.classList.add("show"); };
-      document.addEventListener("click", e=>{ if(!e.target.closest(".hsearch")) gsr.classList.remove("show"); });
-      if(searchQ.trim().length>=2) bindSearchItems();
+  document.querySelectorAll("[data-rcv]").forEach(b=>b.onclick=async()=>{
+    const id=+b.dataset.rcv, q=+el("rcv-"+id).value; if(!q) return;
+    const p=S.products.find(p=>p.id===id); p.stock+=q; await save(); render(); toast("Stock +"+q);
+  });
+  document.querySelectorAll("[data-delp]").forEach(b=>b.onclick=async()=>{ if(confirm("Supprimer ?")){ S.products=S.products.filter(p=>p.id!==+b.dataset.delp); await save(); render(); } });
+  
+  // Clients
+  if(el("c-add")) el("c-add").onclick=async()=>{
+    const name=el("c-name").value.trim(); if(!name) return toast("Nom requis");
+    const dial=el("c-dial").value, local=normPhone(dial, el("c-local").value);
+    if(editClientId){
+      const c=S.clients.find(c=>c.id===editClientId);
+      c.name=name; c.type=el("c-type").value; c.zone=el("c-zone").value; c.dial=dial; c.local=local; c.phone=dial+" "+local;
+      editClientId=null;
+    }else{
+      S.clients.push({id:nid(), name, type:el("c-type").value, zone:el("c-zone").value, dial, local, phone:dial+" "+local, created:today()});
     }
+    await save(); render(); toast("Client enregistré");
+  };
+  if(el("c-cancel")) el("c-cancel").onclick=()=>{ editClientId=null; render(); };
+  document.querySelectorAll("[data-cedit]").forEach(b=>b.onclick=()=>{ editClientId=+b.dataset.cedit; render(); });
+  document.querySelectorAll("[data-delc]").forEach(b=>b.onclick=async()=>{ if(confirm("Supprimer ?")){ S.clients=S.clients.filter(c=>c.id!==+b.dataset.delc); await save(); render(); } });
+  
+  // Commandes
+  if(el("o-addline")) el("o-addline").onclick=()=>{ const p=S.products[0]; if(p) draft.lines.push({productId:p.id, qty:1, price:p.price}); render(); };
+  if(el("o-save")) el("o-save").onclick=async()=>{
+    if(!draft.lines.length) return;
+    const num="CMD-"+String(S.orderSeq++).padStart(4,"0");
+    S.orders.push({id:nid(), num, date:draft.date, clientId:draft.clientId, lines:draft.lines, status:"pending", delivered:false, payments:[], createdBy:me().name});
+    log("Commande créée: "+num); draft=null; await save(); render(); toast("Commande créée");
+  };
+  document.querySelectorAll("[data-deliver]").forEach(b=>b.onclick=async()=>{ const o=S.orders.find(o=>o.id===+b.dataset.deliver); if(o){ o.delivered=true; refreshStatus(o); await save(); render(); toast("Livré"); } });
+  document.querySelectorAll("[data-quickpay]").forEach(b=>b.onclick=async()=>{ const o=S.orders.find(o=>o.id===+b.dataset.quickpay); if(o){ const due=orderDue(o); const amount=prompt("Montant à encaisser (max "+fmt(due)+")", due); if(amount){ o.payments.push({id:nid(), date:today(), amount:Math.min(due,+amount), method:"Espèces", by:me().name}); refreshStatus(o); await save(); render(); toast("Encaissement OK"); } } });
+  document.querySelectorAll("[data-ocancel]").forEach(b=>b.onclick=async()=>{ const o=S.orders.find(o=>o.id===+b.dataset.ocancel); if(o&&confirm("Annuler ?")){ o.status="cancelled"; await save(); render(); toast("Annulé"); } });
+  document.querySelectorAll("[data-odetail]").forEach(b=>b.onclick=()=>{ const o=S.orders.find(o=>o.id===+b.dataset.odetail); toast("Détail commande "+o.num); });
+  document.querySelectorAll("[data-cdetail]").forEach(b=>b.onclick=()=>{ const c=S.clients.find(c=>c.id===+b.dataset.cdetail); toast("Fiche client "+c.name); });
+  
+  // Dépenses
+  if(el("e-add")) el("e-add").onclick=async()=>{
+    const label=el("e-label").value.trim(), amount=+el("e-amount").value;
+    if(!label||!amount) return toast("Libellé et montant requis");
+    S.expenses.push({id:nid(), label, category:el("e-cat").value, amount, date:el("e-date").value||today(), by:me().name});
+    await save(); render(); toast("Dépense enregistrée");
+  };
+  
+  // Fournisseurs
+  if(el("s-add")) el("s-add").onclick=async()=>{
+    const name=el("s-name").value.trim(); if(!name) return toast("Nom requis");
+    S.suppliers.push({id:nid(), name, zone:el("s-zone").value, contact:el("s-contact").value, cat:el("s-cat").value});
+    await save(); render(); toast("Fournisseur ajouté");
+  };
+  document.querySelectorAll("[data-sedit]").forEach(b=>b.onclick=()=>toast("Édition à venir"));
+  document.querySelectorAll("[data-dels]").forEach(b=>b.onclick=async()=>{ if(confirm("Supprimer ?")){ S.suppliers=S.suppliers.filter(s=>s.id!==+b.dataset.dels); await save(); render(); } });
+  
+  // Monitoring
+  if(el("mo-apply")) el("mo-apply").onclick=()=>{ monitorPeriod.from=el("mo-month").value; render(); };
+  if(el("obj-save")) el("obj-save").onclick=async()=>{
+    const month=monitorPeriod.from||monthKey();
+    S.objectives[month]={ca:+el("obj-ca").value||0, orders:+el("obj-orders").value||0, encaissement:+el("obj-enc").value||0};
+    await save(); render(); toast("Objectifs enregistrés");
+  };
+  
+  // Utilisateurs
+  if(el("u-save")) el("u-save").onclick=async()=>{
+    const name=el("u-name").value.trim(), login=el("u-login").value.trim().toLowerCase(), role=el("u-role").value, pass=el("u-pass").value;
+    if(!name||!login) return toast("Nom et identifiant requis");
+    const perms={}; PERMS.forEach(([k])=>{ perms[k]=el("perm-"+k).checked; });
+    if(editUserId){
+      const u=S.users.find(u=>u.id===editUserId);
+      u.name=name; u.role=role; u.perms=perms;
+      if(pass){ if(pass.length<4) return toast("Mot de passe min 4 caractères"); u.salt=Math.random().toString(36).slice(2,10); u.hash=await sha256(u.salt+pass); }
+      editUserId=null;
+    }else{
+      if(pass.length<4) return toast("Mot de passe min 4 caractères");
+      const salt=Math.random().toString(36).slice(2,10);
+      S.users.push({id:nid(), name, login, salt, hash:await sha256(salt+pass), role, perms, active:true});
+    }
+    await save(); render(); toast("Utilisateur enregistré");
+  };
+  if(el("u-cancel")) el("u-cancel").onclick=()=>{ editUserId=null; render(); };
+  document.querySelectorAll("[data-uedit]").forEach(b=>b.onclick=()=>{ editUserId=+b.dataset.uedit; render(); });
+  document.querySelectorAll("[data-utoggle]").forEach(b=>b.onclick=async()=>{ const u=S.users.find(u=>u.id===+b.dataset.utoggle); if(u){ u.active=!u.active; await save(); render(); } });
+  
+  // Sauvegarde
+  if(el("bk-export")) el("bk-export").onclick=()=>{ const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([JSON.stringify(S,null,2)],{type:"application/json"})); a.download="distrivia-backup-"+today()+".json"; a.click(); };
+  if(el("bk-csv")) el("bk-csv").onclick=()=>{ const rows=[["N°","Date","Client","Total","Payé","Reste"]]; S.orders.forEach(o=>rows.push([o.num,o.date,clientName(o.clientId),orderTotal(o),orderPaid(o),orderDue(o)])); const csv=rows.map(r=>r.map(v=>'"'+v+'"').join(";")).join("\n"); const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob(["\uFEFF"+csv],{type:"text/csv"})); a.download="commandes-"+today()+".csv"; a.click(); };
+  if(el("bk-import")) el("bk-import").onclick=()=>el("bk-file").click();
+  if(el("bk-file")) el("bk-file").onchange=e=>{ const f=e.target.files[0]; if(f){ const r=new FileReader(); r.onload=async(ev)=>{ try{ const d=JSON.parse(ev.target.result); S=d; migrate(); await save(); render(); toast("Restauration OK"); }catch(e){ toast("Fichier invalide"); } }; r.readAsText(f); } };
+  if(el("bk-reset")) el("bk-reset").onclick=async()=>{ if(confirm("Tout effacer ? Irréversible !")){ S={version:5, users:[], products:[], clients:[], orders:[], expenses:[], suppliers:[], purchases:[], campaigns:[], employees:[], objectives:{}, logs:[], seq:1, orderSeq:1, poSeq:1}; session=null; await save(); await saveSession(); render(); } };
+}
 
-    const pAdd = el("p-add");
-    if(pAdd) pAdd.onclick = async ()=>{
-      const name = el("p-name").value.trim(); if(!name) return toast("Nom du produit requis");
-      S.products.push({ id:nid(), name, family:el("p-fam").value, cost:+el("p-cost").value||0, price:+el("p-price").value||0, stock:+el("p-stock").value||0, alert:+el("p-alert").value||0 });
-      log("Produit créé : "+name);
-      await save(); render(); toast("Produit ajouté ✓");
-    };
-    
-    document.querySelectorAll("[data-rcv]").forEach(b=> b.onclick = async ()=>{
-      const id=+b.dataset.rcv, q=+el("rcv-"+id).value;
-      if(!q||q<1) return toast("Indiquez la quantité reçue");
-      const p=S.products.find(p=>p.id===id); p.stock+=q;
-      log("Réception stock : +"+q+" "+p.name);
-      await save(); render(); toast("+"+q+" en stock ✓");
-    });
-    
-    document.querySelectorAll("[data-delp]").forEach(b=> b.onclick = async ()=>{
-      const id=+b.dataset.delp;
-      if(S.orders.some(o=>o.lines.some(l=>l.productId===id))) return toast("Produit utilisé dans des commandes — suppression bloquée");
-      if(!confirm("Supprimer ce produit ?")) return;
-      const p=S.products.find(p=>p.id===id);
-      S.products = S.products.filter(p=>p.id!==id);
-      log("Produit supprimé : "+(p?p.name:id));
-      await save(); render();
-    });
-    
-    const cAdd = el("c-add");
-    if(cAdd) cAdd.onclick = async ()=>{
-      const name = el("c-name").value.trim(); if(!name) return toast("Nom du client requis");
-      const dial = el("c-dial").value;
-      const local = normPhone(dial, el("c-local").value);
-      if(!local) return toast("Le numéro de téléphone est obligatoire");
-      if(phoneExists(dial, local, editClientId)) return toast("⚠ Ce numéro existe déjà");
-      if(editClientId){
-        const c = S.clients.find(c=>c.id===editClientId);
-        c.name=name; c.type=el("c-type").value; c.zone=el("c-zone").value.trim(); c.dial=dial; c.local=local; c.phone=dial+" "+local;
-        log("Client modifié : "+name); editClientId=null;
-      } else {
-        S.clients.push({ id:nid(), name, type:el("c-type").value, zone:el("c-zone").value.trim(), dial, local, phone:dial+" "+local, created:today() });
-        log("Client créé : "+name);
-      }
-      await save(); render(); toast("Client enregistré ✓");
-    };
-    
-    const cCancel = el("c-cancel"); if(cCancel) cCancel.onclick = ()=>{ editClientId=null; render(); };
-    document.querySelectorAll("[data-cedit]").forEach(b=> b.onclick = ()=>{ editClientId=+b.dataset.cedit; tab="clients"; render(); });
-    document.querySelectorAll("[data-delc]").forEach(b=> b.onclick = async ()=>{
-      const id=+b.dataset.delc;
-      if(S.orders.some(o=>o.clientId===id)) return toast("Client avec commandes — suppression bloquée");
-      if(!confirm("Supprimer ce client ?")) return;
-      S.clients = S.clients.filter(c=>c.id!==id);
-      log("Client supprimé"); await save(); render();
-    });
-    
-    const oNew = el("o-new");
-    if(oNew) oNew.onclick = ()=>{ toast("Création de commande à implémenter"); };
-    
-    document.querySelectorAll("[data-deliver]").forEach(b=> b.onclick = async ()=>{
-      const id=+b.dataset.deliver; const o=S.orders.find(o=>o.id===id);
-      if(!o) return; o.delivered=true; o.deliveredDate=today(); o.deliveredBy=me().name;
-      refreshStatus(o); log("Commande livrée : "+o.num);
-      await save(); render(); toast("Livrée ✓");
-    });
-    
-    document.querySelectorAll("[data-quickpay]").forEach(b=> b.onclick = async ()=>{
-      const id=+b.dataset.quickpay; const o=S.orders.find(o=>o.id===id);
-      if(!o) return; const due=orderDue(o);
-      const v=prompt("Montant à encaisser pour "+o.num+" (reste "+fmt(due)+") :", due);
-      if(!v) return; const amount=Math.min(due, Math.max(0,+String(v).replace(/[^\d]/g,"")||0));
-      if(!amount) return;
-      o.payments.push({id:nid(), date:today(), amount, method:"Espèces", by:me().name});
-      refreshStatus(o); log("Versement encaissé : "+o.num); await save(); render(); toast("Encaissement ✓");
-    });
-    
-    document.querySelectorAll("[data-oedit]").forEach(b=> b.onclick = ()=>{ toast("Édition de commande à implémenter"); });
-    document.querySelectorAll("[data-ocancel]").forEach(b=> b.onclick = async ()=>{
-      const o=S.orders.find(o=>o.id===+b.dataset.ocancel);
-      const reason=prompt("Motif d'annulation de "+o.num+" :"); if(!reason) return;
-      o.status="cancelled"; o.cancelReason=reason;
-      if(o.delivered){ o.lines.forEach(l=>{ const p=S.products.find(p=>p.id===l.productId); if(p) p.stock+=l.qty; }); }
-      log("Commande annulée : "+o.num); await save(); render(); toast("Commande annulée");
-    });
-    
-    document.querySelectorAll("[data-oreceipt]").forEach(b=> b.onclick = ()=>{
-      const o=S.orders.find(o=>o.id===+b.dataset.oreceipt);
-      toast("Reçu: "+o.num);
-    });
-    
-    document.querySelectorAll("[data-odetail]").forEach(b=> b.onclick = ()=>{ toast("Détail commande"); });
-    document.querySelectorAll("[data-cdetail]").forEach(b=> b.onclick = ()=>{ toast("Détail client"); });
-    
-    // Exports
-    const bkExport = el("bk-export");
-    if(bkExport) bkExport.onclick = ()=>{
-      const blob = new Blob([JSON.stringify(S,null,2)],{type:"application/json"});
-      const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="distrivia-backup-"+today()+".json"; a.click();
-    };
-    
-    [["orders","xlsx"],["orders","csv"],["orders","pdf"],["clients","xlsx"],["clients","csv"]].forEach(([k,f])=>{
-      const btn = el("exp-"+k+"-"+f); if(btn) btn.onclick = ()=>{ toast("Export "+f.toUpperCase()+" "+k); };
-    });
-  }
-  
-  function bindSearchItems(){
-    document.querySelectorAll("[data-goclient]").forEach(it=> it.onclick = ()=>{ const id=+it.dataset.goclient; searchQ=""; tab="clients"; render(); setTimeout(()=>{ highlightClient(id); }, 60); });
-    document.querySelectorAll("[data-goorder]").forEach(it=> it.onclick = ()=>{ const id=+it.dataset.goorder; searchQ=""; tab="orders"; render(); });
-    document.querySelectorAll("[data-goproduct]").forEach(it=> it.onclick = ()=>{ searchQ=""; tab="products"; render(); });
-  }
-  
-  function highlightClient(id){ const c=S.clients.find(c=>c.id===id); if(!c) return; }
-  
-  function vUsers(){
-    return `<h2>Utilisateurs</h2><div class="panel"><div class="tablewrap"></td>
-      <tr><th>Nom</th><th>Identifiant</th><th>Rôle</th><th>Statut</th><th></th></tr>
-      ${S.users.map(u=>`<tr><td><b>${esc(u.name)}</b></td><td>${esc(u.login)}</td><td>${u.role==="admin"?'<span class="badge admin">Admin</span>':'<span class="badge emp">Employé</span>'}</td>
-      <td>${u.active!==false?'<span class="badge ok">Actif</span>':'<span class="badge off">Désactivé</span>'}</td>
-      <td><button class="btn sm ghost" data-uedit="${u.id}">Modifier</button> ${u.id!==me()?.id?`<button class="btn sm" style="background:var(--rouge)" data-utoggle="${u.id}">${u.active!==false?"Désactiver":"Activer"}</button>`:""}</td></tr>`).join("")}
-    </table></div></div>`;
-  }
+function bindSearchItems(){
+  document.querySelectorAll("[data-goclient]").forEach(it=>it.onclick=()=>{ const id=+it.dataset.goclient; searchQ=""; tab="clients"; render(); });
+  document.querySelectorAll("[data-goorder]").forEach(it=>it.onclick=()=>{ const id=+it.dataset.goorder; searchQ=""; tab="orders"; render(); });
+}
 
-  // Lancement
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", window.loadAll);
-  } else {
-    window.loadAll();
-  }
+// ==================== LANCEMENT ====================
+loadAll();
 </script>
 </body>
 </html>
