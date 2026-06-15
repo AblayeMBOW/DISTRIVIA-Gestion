@@ -33,6 +33,7 @@
   nav{display:flex; background:var(--bleu2); overflow-x:auto; -webkit-overflow-scrolling:touch;}
   nav button{flex:0 0 auto; padding:11px 16px; background:none; border:none; color:#C9D4E2; font-weight:600; font-size:13px; cursor:pointer; border-bottom:3px solid transparent; white-space:nowrap;}
   nav button.active{color:#fff; border-bottom-color:var(--terra); background:rgba(255,255,255,.05);}
+  .navbadge{display:inline-block; min-width:18px; height:18px; line-height:18px; padding:0 5px; margin-left:6px; background:var(--terra); color:#fff; border-radius:9px; font-size:11px; font-weight:800; text-align:center; vertical-align:middle;}
   main{max-width:1100px; margin:0 auto; padding:16px;}
   h2{color:var(--bleu); font-size:19px; margin:6px 0 12px;}
   h3{color:var(--terra); font-size:13.5px; margin:14px 0 8px; text-transform:uppercase; letter-spacing:1px;}
@@ -167,6 +168,29 @@ window.DISTRIVIA_FB = {
       const d = snap.data();
       if(d && d.blob){ cb(d.blob, snap.metadata.hasPendingWrites); }
     }, err=>console.warn("Firestore listen:", err));
+  },
+  /* ---- Accès aux collections du PORTAIL clients/fournisseurs ---- */
+  async listCollection(name){
+    if(!FB_OK) return [];
+    try{
+      const fs = firebase.firestore();
+      const snap = await fs.collection(name).get();
+      return snap.docs.map(d=>({ _id:d.id, ...d.data() }));
+    }catch(e){ console.warn("listCollection "+name+":", e); return []; }
+  },
+  listenCollection(name, cb){
+    if(!FB_OK) return;
+    try{
+      const fs = firebase.firestore();
+      return fs.collection(name).onSnapshot(snap=>{
+        cb(snap.docs.map(d=>({ _id:d.id, ...d.data() })));
+      }, err=>console.warn("listen "+name+":", err));
+    }catch(e){ console.warn(e); }
+  },
+  async updateDoc(name, id, patch){
+    if(!FB_OK) return;
+    try{ await firebase.firestore().collection(name).doc(id).update(patch); }
+    catch(e){ console.warn("updateDoc:", e); }
   }
 };
 </script>
@@ -309,6 +333,12 @@ let acctPeriod = { from:"", to:"" };
 let ctrlPeriod = { from:"", to:"" };
 let cashPeriod = { from:"", to:"" };
 let monitorPeriod = { from:"", to:"" };
+// Données venant du PORTAIL clients/fournisseurs (Firestore temps réel)
+let webOrders = [];       // portal_orders
+let webAppointments = []; // portal_appointments
+let webClaims = [];       // portal_claims
+let webQuotes = [];       // portal_quotes
+let webLoaded = false;
 const acctFrom = () => acctPeriod.from; const acctTo = () => acctPeriod.to;
 const ctrlFrom = () => ctrlPeriod.from; const ctrlTo = () => ctrlPeriod.to;
 
@@ -362,6 +392,26 @@ async function loadAll(){
         fbSyncing = true; render(); fbSyncing = false;
       }catch(e){ console.warn("sync:", e); }
     });
+    // Écoute des données du portail clients/fournisseurs
+    if (FB.listenCollection){
+      FB.listenCollection("portal_orders", rows=>{ webOrders=rows; webLoaded=true; if(tab==="weborders"&&me()) render(); refreshWebBadge(); });
+      FB.listenCollection("portal_appointments", rows=>{ webAppointments=rows; if(tab==="weborders"&&me()) render(); refreshWebBadge(); });
+      FB.listenCollection("portal_claims", rows=>{ webClaims=rows; if(tab==="weborders"&&me()) render(); refreshWebBadge(); });
+      FB.listenCollection("portal_quotes", rows=>{ webQuotes=rows; if(tab==="weborders"&&me()) render(); refreshWebBadge(); });
+    }
+  }
+}
+// Met à jour la pastille du menu "Commandes web"
+function refreshWebBadge(){
+  const n = webOrders.filter(o=>o.status==="new").length
+          + webAppointments.filter(a=>a.status==="pending").length
+          + webClaims.filter(c=>c.status==="pending").length
+          + webQuotes.filter(q=>q.status==="pending").length;
+  const btn = document.querySelector('[data-tab="weborders"]');
+  if(btn){
+    let b = btn.querySelector(".navbadge");
+    if(n>0){ if(!b){ b=document.createElement("span"); b.className="navbadge"; btn.appendChild(b); } b.textContent=n; }
+    else if(b){ b.remove(); }
   }
 }
 async function save(){
@@ -498,6 +548,7 @@ function chrome(content){
   const u = me();
   const tabs = [
     ["dash","Tableau de bord",true],
+    ["weborders","Commandes web",can("orders_create")],
     ["orders","Commandes",true],
     ["clients","Clients",true],
     ["products","Produits & Stock",true],
@@ -586,6 +637,64 @@ function orderRow(o){
 }
 function orderTableHead(){
   return `<tr><th>N°</th><th>Date</th><th>Client</th><th class="num">Total</th><th class="num">Reste dû</th><th>Livraison</th><th>Paiement</th><th></th></tr>`;
+}
+
+/* ================== COMMANDES WEB (portail) ================== */
+function webBadge(s){ return {new:"pending",confirmed:"delivered",delivered:"paid",cancelled:"off",pending:"pending",resolved:"paid"}[s]||"pending"; }
+function webStatusLabel(s){ return {new:"Nouvelle",confirmed:"Confirmée",delivered:"Livrée",cancelled:"Annulée",pending:"En attente",resolved:"Traitée"}[s]||s; }
+function vWebOrders(){
+  if(!FB.ok){
+    return `<h2>Commandes web</h2><div class="infobox">Cette boîte de réception affiche les commandes, rendez-vous, réclamations et cotations envoyés depuis le <b>portail clients/fournisseurs</b>.<br><br>⚠ Firebase n'est pas configuré : la liaison avec le portail est inactive. Renseignez vos clés Firebase pour activer la réception en temps réel.</div>`;
+  }
+  const pendingOrders = webOrders.filter(o=>o.status==="new");
+  const pendingAppts = webAppointments.filter(a=>a.status==="pending");
+  const pendingClaims = webClaims.filter(c=>c.status==="pending");
+  const pendingQuotes = webQuotes.filter(q=>q.status==="pending");
+  return `
+  <h2>Commandes web <span class="muted" style="font-size:14px">— reçues du portail en ligne</span></h2>
+  ${!webLoaded?`<div class="infobox">Chargement des données du portail…</div>`:""}
+  <div class="cards">
+    <div class="card ${pendingOrders.length?'t':''}"><div class="v">${pendingOrders.length}</div><div class="l">Commandes à traiter</div></div>
+    <div class="card"><div class="v">${pendingAppts.length}</div><div class="l">Rendez-vous demandés</div></div>
+    <div class="card"><div class="v">${pendingClaims.length}</div><div class="l">Réclamations ouvertes</div></div>
+    <div class="card"><div class="v">${pendingQuotes.length}</div><div class="l">Cotations fournisseurs</div></div>
+  </div>
+
+  <div class="panel"><h3>🛒 Commandes clients (${webOrders.length})</h3>
+  ${webOrders.length?`<div class="tablewrap"><table>
+    <tr><th>Réf</th><th>Date</th><th>Client</th><th>Articles</th><th>Livraison</th><th>Statut</th><th></th></tr>
+    ${[...webOrders].sort((a,b)=>(a.created<b.created?1:-1)).map(o=>`<tr>
+      <td><b>${esc(o.ref)}</b></td><td>${(o.created||"").slice(0,10)}</td>
+      <td>${esc(o.client_name||"")}<div class="muted">${esc(o.client_email||"")}</div></td>
+      <td class="muted">${(o.items||[]).map(i=>i.qty+"× "+esc(i.name)).join(", ")}${o.note?`<div class="muted">📝 ${esc(o.note)}</div>`:""}</td>
+      <td class="muted">${o.delivery==="pickup"?"Retrait":"Livraison"}${o.zone?"<br>"+esc(o.zone):""}</td>
+      <td><span class="badge ${webBadge(o.status)}">${webStatusLabel(o.status)}</span></td>
+      <td class="row">${o.status==="new"?`<button class="btn sm b" data-webaccept="${esc(o._id)}">Accepter</button><button class="btn sm" style="background:var(--rouge)" data-webreject="${esc(o._id)}">Refuser</button>`:`<span class="muted">${o.localNum?("→ "+esc(o.localNum)):"traitée"}</span>`}</td>
+    </tr>`).join("")}
+  </table></div>`:`<p class="empty">Aucune commande web pour l'instant. Elles apparaîtront ici dès qu'un client commande sur le portail.</p>`}
+  </div>
+
+  <div class="grid2">
+    <div class="panel"><h3>📅 Rendez-vous (${webAppointments.length})</h3>
+    ${webAppointments.length?`<div class="tablewrap"><table><tr><th>Client</th><th>Objet</th><th>Quand</th><th></th></tr>
+      ${[...webAppointments].sort((a,b)=>(a.created<b.created?1:-1)).map(a=>`<tr><td>${esc(a.client_name||"")}</td><td class="muted">${esc(a.subject||"")}</td><td>${esc(a.date||"")} ${esc(a.slot||"")}</td>
+      <td>${a.status==="pending"?`<button class="btn sm b" data-webappt="${esc(a._id)}">Confirmer</button>`:`<span class="badge paid">OK</span>`}</td></tr>`).join("")}
+    </table></div>`:`<p class="empty">Aucun rendez-vous.</p>`}
+    </div>
+    <div class="panel"><h3>⚠ Réclamations (${webClaims.length})</h3>
+    ${webClaims.length?`<div class="tablewrap"><table><tr><th>Client</th><th>Objet</th><th></th></tr>
+      ${[...webClaims].sort((a,b)=>(a.created<b.created?1:-1)).map(c=>`<tr><td>${esc(c.author_name||"")}<div class="muted">${esc((c.message||"").slice(0,50))}${(c.message||"").length>50?"…":""}</div></td><td class="muted">${esc(c.type||"")}${c.ref?`<br>${esc(c.ref)}`:""}</td>
+      <td>${c.status==="pending"?`<button class="btn sm b" data-webclaim="${esc(c._id)}">Traiter</button>`:`<span class="badge paid">Traitée</span>`}</td></tr>`).join("")}
+    </table></div>`:`<p class="empty">Aucune réclamation.</p>`}
+    </div>
+  </div>
+
+  <div class="panel"><h3>🏭 Cotations fournisseurs (${webQuotes.length})</h3>
+  ${webQuotes.length?`<div class="tablewrap"><table><tr><th>Réf</th><th>Fournisseur</th><th>Produit</th><th>Prix proposé</th><th>Délai</th><th></th></tr>
+    ${[...webQuotes].sort((a,b)=>(a.created<b.created?1:-1)).map(q=>`<tr><td><b>${esc(q.ref)}</b></td><td>${esc(q.supplier_name||"")}</td><td>${esc(q.product||"")}${q.moq?`<div class="muted">MOQ : ${esc(q.moq)}</div>`:""}</td><td>${esc(q.price||"")}</td><td class="muted">${esc(q.delay||"")}</td>
+    <td>${q.status==="pending"?`<button class="btn sm b" data-webquote="${esc(q._id)}">Marquer vue</button>`:`<span class="badge paid">Vue</span>`}</td></tr>`).join("")}
+  </table></div>`:`<p class="empty">Aucune cotation reçue.</p>`}
+  </div>`;
 }
 
 function vDash(){
@@ -1682,8 +1791,8 @@ function render(){
   const root = el("root");
   if (!S.users.length) { root.innerHTML = vSetup(); bindSetup(); return; }
   if (!session || !me()) { root.innerHTML = vLogin(); bindLogin(); return; }
-  const views = {dash:vDash, orders:vOrders, clients:vClients, products:vProducts, suppliers:vSuppliers, logistics:vLogistics, cash:vCash, accounting:vAccounting, control:vControl, marketing:vMarketing, hr:vHR, monitoring:vMonitoring, users:vUsers, backup:vBackup};
-  const guard = {cash:"cash_view", suppliers:"suppliers", accounting:"accounting", control:"control", logistics:"logistics", marketing:"marketing", hr:"hr", monitoring:"monitoring"};
+  const views = {dash:vDash, weborders:vWebOrders, orders:vOrders, clients:vClients, products:vProducts, suppliers:vSuppliers, logistics:vLogistics, cash:vCash, accounting:vAccounting, control:vControl, marketing:vMarketing, hr:vHR, monitoring:vMonitoring, users:vUsers, backup:vBackup};
+  const guard = {weborders:"orders_create", cash:"cash_view", suppliers:"suppliers", accounting:"accounting", control:"control", logistics:"logistics", marketing:"marketing", hr:"hr", monitoring:"monitoring"};
   if (guard[tab] && !can(guard[tab])) tab="dash";
   if ((tab==="users"||tab==="backup") && !isAdmin()) tab = "dash";
   root.innerHTML = chrome(views[tab]());
@@ -1693,6 +1802,7 @@ function render(){
   if (tab==="marketing") setTimeout(drawMarketingCharts, 30);
   if (tab==="hr") setTimeout(drawHRCharts, 30);
   if (tab==="monitoring") setTimeout(drawMonitoringCharts, 30);
+  setTimeout(refreshWebBadge, 20);
 }
 
 /* ================== BINDINGS ================== */
@@ -1730,6 +1840,51 @@ function bindApp(){
   document.querySelectorAll("nav button").forEach(b=> b.onclick = ()=>{ tab=b.dataset.tab; searchQ=""; render(); });
   el("logout").onclick = async ()=>{ log("Déconnexion"); await save(); session=null; await saveSession(); render(); };
   const mp = el("myprofile"); if(mp) mp.onclick = openProfile;
+
+  // ===== Commandes web (portail) =====
+  document.querySelectorAll("[data-webaccept]").forEach(b=> b.onclick = async ()=>{
+    const wo = webOrders.find(o=>o._id===b.dataset.webaccept); if(!wo) return;
+    if(!confirm("Accepter la commande "+wo.ref+" de "+(wo.client_name||"")+" ?\n\nUn client et une commande seront créés dans DISTRIVIA Gestion.")) return;
+    // 1) trouver ou créer le client (par email ou nom)
+    let cli = S.clients.find(c=> (wo.client_email && c.email && c.email.toLowerCase()===String(wo.client_email).toLowerCase()) || c.name===wo.client_name );
+    if(!cli){
+      cli = { id:nid(), name:wo.client_name||"Client web", type:"Boutique / revendeur", zone:wo.zone||"", dial:"+221", local:"", phone:"", email:(wo.client_email||""), created:today() };
+      S.clients.push(cli);
+    }
+    // 2) créer la commande (prix repris du catalogue produits si trouvé, sinon 0 à compléter)
+    const lines = (wo.items||[]).map(it=>{
+      const prod = S.products.find(p=>p.name===it.name);
+      return { name:it.name, qty:it.qty||1, price: prod?prod.price:0, productId: prod?prod.id:null };
+    });
+    const num = "CMD-" + String(S.orderSeq++).padStart(4,"0");
+    S.orders.push({ id:nid(), num, date:today(), clientId:cli.id, payMode:"comptant", dueDate:null,
+      lines, status:"pending", delivered:false, payments:[], createdBy:(me().name+" (web)"),
+      webRef:wo.ref, note:wo.note||"" });
+    log("Commande web acceptée : "+wo.ref+" → "+num);
+    await save();
+    // 3) marquer la commande web comme confirmée
+    if(FB.updateDoc) await FB.updateDoc("portal_orders", wo._id, { status:"confirmed", localNum:num });
+    toast("Commande "+num+" créée ✓ — complétez les prix si besoin");
+    tab="orders"; render();
+  });
+  document.querySelectorAll("[data-webreject]").forEach(b=> b.onclick = async ()=>{
+    const wo = webOrders.find(o=>o._id===b.dataset.webreject); if(!wo) return;
+    if(!confirm("Refuser la commande "+wo.ref+" ?")) return;
+    if(FB.updateDoc) await FB.updateDoc("portal_orders", wo._id, { status:"cancelled" });
+    toast("Commande web refusée");
+  });
+  document.querySelectorAll("[data-webappt]").forEach(b=> b.onclick = async ()=>{
+    if(FB.updateDoc) await FB.updateDoc("portal_appointments", b.dataset.webappt, { status:"confirmed" });
+    toast("Rendez-vous confirmé ✓");
+  });
+  document.querySelectorAll("[data-webclaim]").forEach(b=> b.onclick = async ()=>{
+    if(FB.updateDoc) await FB.updateDoc("portal_claims", b.dataset.webclaim, { status:"resolved" });
+    toast("Réclamation marquée traitée ✓");
+  });
+  document.querySelectorAll("[data-webquote]").forEach(b=> b.onclick = async ()=>{
+    if(FB.updateDoc) await FB.updateDoc("portal_quotes", b.dataset.webquote, { status:"resolved" });
+    toast("Cotation marquée vue ✓");
+  });
 
   // Recherche globale (en-tête, style NetSuite)
   const gs = el("globalsearch");
