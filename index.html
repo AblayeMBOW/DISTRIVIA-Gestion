@@ -73,6 +73,20 @@
   .perms{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:4px 14px; margin-top:6px;}
   .perms label{display:flex; align-items:center; gap:7px; text-transform:none; font-size:13px; font-weight:500; color:var(--anthra); margin:3px 0;}
   .perms input{width:auto;}
+  .loginpage{ min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;
+    background:
+      radial-gradient(circle at 50% 38%, rgba(255,255,255,.05), transparent 60%),
+      linear-gradient(160deg, #0F2A4A 0%, #1B3D63 100%);
+    position:relative; overflow:hidden; }
+  /* Logo monogramme géant en filigrane */
+  .loginpage::before{ content:""; position:absolute; width:min(120vw,760px); height:min(120vw,760px);
+    top:50%; left:50%; transform:translate(-50%,-52%);
+    background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='none'/%3E%3Ctext x='32' y='44' font-family='Arial,sans-serif' font-size='40' font-weight='bold' fill='%23ffffff' text-anchor='middle'%3ED%3C/text%3E%3Crect x='17' y='50' width='30' height='5' rx='2' fill='%23C85E2D'/%3E%3C/svg%3E") center/contain no-repeat;
+    opacity:.06; pointer-events:none; }
+  /* Barre terracotta décorative en bas */
+  .loginpage::after{ content:""; position:absolute; bottom:0; left:0; right:0; height:5px; background:var(--terra); }
+  .loginpage .login{ position:relative; z-index:2; background:rgba(255,255,255,.97); backdrop-filter:blur(2px); box-shadow:0 18px 50px rgba(0,0,0,.35); }
+  .loginpage .footnote{ position:absolute; bottom:18px; left:0; right:0; text-align:center; color:#9FB3CC; font-size:12px; z-index:2; }
   .login{max-width:400px; margin:7vh auto; background:#fff; border-radius:12px; padding:26px; box-shadow:0 4px 18px rgba(15,42,74,.15);}
   .login .wordmark{color:var(--bleu); text-align:center; letter-spacing:7px; font-size:24px;}
   .login .bar{margin:6px auto;} .login .sub{color:var(--gris); text-align:center; letter-spacing:3px;}
@@ -87,6 +101,75 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+<!-- ============================================================
+     FIREBASE — base de donnees partagee entre tous les appareils
+     ============================================================
+     COLLEZ VOS CLES ci-dessous (console Firebase -> Parametres du projet
+     -> Vos applications -> Configuration du SDK -> "Configuration").
+     Tant que les cles ne sont pas remplies, l'application fonctionne
+     en local sur cet appareil uniquement. -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+/* >>> 1. COLLEZ VOTRE firebaseConfig ENTRE LES ACCOLADES <<< */
+const firebaseConfig = {
+  apiKey: "AIzaSyCcl7rBRT1jiDwVR30_1dUND9HCKkq8sgg",
+  authDomain: "distrivia-group.firebaseapp.com",
+  projectId: "distrivia-group",
+  storageBucket: "distrivia-group.firebasestorage.app",
+  messagingSenderId: "379306867104",
+  appId: "1:379306867104:web:08d849ee32095d67a88cc5"
+};
+/* >>> 2. Ne touchez a rien d'autre. <<< */
+
+const FB_OK = !!(firebaseConfig.apiKey && firebaseConfig.projectId);
+let fbDoc = null;
+let fbUnsub = null;
+const FB_DOCID = "etat";
+
+if (FB_OK) {
+  try {
+    firebase.initializeApp(firebaseConfig);
+    fbDoc = firebase.firestore().collection("distrivia").doc(FB_DOCID);
+    // Connexion anonyme : laissez-passer Firebase (compatible avec la règle "request.auth != null").
+    // Les vrais comptes (admin/employés) restent gérés par l'application.
+    if (firebase.auth) {
+      firebase.auth().signInAnonymously().catch(e=>console.warn("Auth anonyme:", e && e.code));
+    }
+  } catch(e){ console.error("Firebase init:", e); }
+}
+window.DISTRIVIA_FB = {
+  ok: FB_OK,
+  async ready(){
+    if(!FB_OK || !firebase.auth) return;
+    if(firebase.auth().currentUser) return;
+    await new Promise(res=>{
+      const to=setTimeout(res, 4000);
+      const unsub=firebase.auth().onAuthStateChanged(u=>{ if(u){ clearTimeout(to); unsub(); res(); } });
+    });
+  },
+  async get(){
+    if(!fbDoc) return null;
+    const snap = await fbDoc.get();
+    return snap.exists ? (snap.data().blob || null) : null;
+  },
+  async set(blob){
+    if(!fbDoc) return;
+    await fbDoc.set({ blob, updated: Date.now() });
+  },
+  listen(cb){
+    if(!fbDoc) return;
+    if(fbUnsub) fbUnsub();
+    fbUnsub = fbDoc.onSnapshot(snap=>{
+      if(!snap.exists) return;
+      const d = snap.data();
+      if(d && d.blob){ cb(d.blob, snap.metadata.hasPendingWrites); }
+    }, err=>console.warn("Firestore listen:", err));
+  }
+};
+</script>
 </head>
 <body>
 <div id="root"></div>
@@ -120,93 +203,10 @@ const PERMS = [
   ["monitoring","Voir le monitoring et les objectifs"],
 ];
 const COUNTRY_CODES = [
-  // Afrique de l'Ouest
-  ["+221","🇸🇳 Sénégal"],
-  ["+223","🇲🇱 Mali"],
-  ["+225","🇨🇮 Côte d'Ivoire"],
-  ["+222","🇲🇷 Mauritanie"],
-  ["+224","🇬🇳 Guinée"],
-  ["+226","🇧🇫 Burkina Faso"],
-  ["+227","🇳🇪 Niger"],
-  ["+228","🇹🇬 Togo"],
-  ["+229","🇧🇯 Bénin"],
-  ["+220","🇬🇲 Gambie"],
-  ["+232","🇸🇱 Sierra Leone"],
-  ["+231","🇱🇷 Liberia"],
-  ["+238","🇨🇻 Cap-Vert"],
-  ["+245","🇬🇼 Guinée-Bissau"],
-  ["+233","🇬🇭 Ghana"],
-  ["+234","🇳🇬 Nigéria"],
-
-  // Afrique Centrale
-  ["+237","🇨🇲 Cameroun"],
-  ["+241","🇬🇦 Gabon"],
-  ["+242","🇨🇬 Congo"],
-  ["+243","🇨🇩 RD Congo"],
-  ["+236","🇨🇫 Centrafrique"],
-  ["+240","🇬🇶 Guinée Équatoriale"],
-  ["+235","🇹🇩 Tchad"],
-
-  // Afrique du Nord
-  ["+212","🇲🇦 Maroc"],
-  ["+213","🇩🇿 Algérie"],
-  ["+216","🇹🇳 Tunisie"],
-  ["+218","🇱🇾 Libye"],
-  ["+20","🇪🇬 Égypte"],
-
-  // Afrique de l'Est et Australe
-  ["+254","🇰🇪 Kenya"],
-  ["+255","🇹🇿 Tanzanie"],
-  ["+256","🇺🇬 Ouganda"],
-  ["+250","🇷🇼 Rwanda"],
-  ["+257","🇧🇮 Burundi"],
-  ["+251","🇪🇹 Éthiopie"],
-  ["+27","🇿🇦 Afrique du Sud"],
-  ["+260","🇿🇲 Zambie"],
-  ["+263","🇿🇼 Zimbabwe"],
-  ["+261","🇲🇬 Madagascar"],
-  ["+230","🇲🇺 Maurice"],
-
-  // Europe
-  ["+33","🇫🇷 France"],
-  ["+32","🇧🇪 Belgique"],
-  ["+41","🇨🇭 Suisse"],
-  ["+39","🇮🇹 Italie"],
-  ["+34","🇪🇸 Espagne"],
-  ["+49","🇩🇪 Allemagne"],
-  ["+351","🇵🇹 Portugal"],
-  ["+44","🇬🇧 Royaume-Uni"],
-  ["+31","🇳🇱 Pays-Bas"],
-
-  // Amérique
-  ["+1","🇺🇸 États-Unis / 🇨🇦 Canada"],
-  ["+55","🇧🇷 Brésil"],
-  ["+52","🇲🇽 Mexique"],
-  ["+54","🇦🇷 Argentine"],
-
-  // Moyen-Orient
-  ["+971","🇦🇪 Émirats Arabes Unis"],
-  ["+966","🇸🇦 Arabie Saoudite"],
-  ["+974","🇶🇦 Qatar"],
-  ["+965","🇰🇼 Koweït"],
-  ["+968","🇴🇲 Oman"],
-
-  // Asie
-  ["+86","🇨🇳 Chine"],
-  ["+90","🇹🇷 Turquie"],
-  ["+91","🇮🇳 Inde"],
-  ["+92","🇵🇰 Pakistan"],
-  ["+880","🇧🇩 Bangladesh"],
-  ["+81","🇯🇵 Japon"],
-  ["+82","🇰🇷 Corée du Sud"],
-  ["+65","🇸🇬 Singapour"],
-  ["+60","🇲🇾 Malaisie"],
-  ["+62","🇮🇩 Indonésie"],
-  ["+84","🇻🇳 Vietnam"],
-
-  // Océanie
-  ["+61","🇦🇺 Australie"],
-  ["+64","🇳🇿 Nouvelle-Zélande"]
+  ["+221","🇸🇳 Sénégal"],["+223","🇲🇱 Mali"],["+225","🇨🇮 Côte d'Ivoire"],["+222","🇲🇷 Mauritanie"],
+  ["+224","🇬🇳 Guinée"],["+226","🇧🇫 Burkina"],["+227","🇳🇪 Niger"],["+228","🇹🇬 Togo"],["+229","🇧🇯 Bénin"],
+  ["+233","🇬🇭 Ghana"],["+234","🇳🇬 Nigéria"],["+212","🇲🇦 Maroc"],["+216","🇹🇳 Tunisie"],["+33","🇫🇷 France"],
+  ["+86","🇨🇳 Chine"],["+90","🇹🇷 Turquie"],["+1","🇺🇸 USA/Canada"],["+44","🇬🇧 UK"],["+971","🇦🇪 Émirats"],
 ];
 const CHANNELS = ["WhatsApp","SMS","Facebook","Instagram","Terrain / visite","Affichage","Radio","Bouche à oreille","Autre"];
 const HR_CONTRACTS = ["CDI","CDD","Stage","Prestation","Journalier"];
@@ -237,10 +237,12 @@ const KEY = "distrivia-erp-v1";
 const KEY_SESSION = "distrivia-session";
 
 /* ================== STOCKAGE ADAPTATIF ==================
-   1) window.storage (application dans Claude)
-   2) localStorage (site publié sur un hébergeur)
-   3) mémoire seule (dernier recours, avec avertissement)      */
-const store = (() => {
+   1) Firebase Firestore (base partagée entre tous les appareils)  ← prioritaire
+   2) window.storage (application dans Claude)
+   3) localStorage (site publié sans Firebase)
+   4) mémoire seule (dernier recours)
+   La SESSION (qui est connecté) reste toujours locale à l'appareil. */
+const localStore = (() => {
   if (typeof window !== "undefined" && window.storage && window.storage.get) {
     return {
       mode: "claude",
@@ -268,6 +270,26 @@ const store = (() => {
     };
   }
 })();
+
+const FB = window.DISTRIVIA_FB || { ok:false };
+const store = {
+  // mode affiché : firebase si configuré, sinon le stockage local détecté
+  mode: FB.ok ? "firebase" : localStore.mode,
+  async get(k){
+    // Les données métier passent par Firebase ; la session reste locale.
+    if (FB.ok && k === KEY){
+      try{ const blob = await FB.get(); return blob; }catch(e){ console.warn("FB get:", e); return await localStore.get(k); }
+    }
+    return await localStore.get(k);
+  },
+  async set(k,v){
+    if (FB.ok && k === KEY){
+      try{ await FB.set(v); return; }catch(e){ console.warn("FB set:", e); }
+    }
+    return await localStore.set(k,v);
+  },
+  async del(k){ return await localStore.del(k); },
+};
 
 /* ================== ÉTAT ================== */
 let S = { version:5, users:[], products:[], clients:[], orders:[], expenses:[], suppliers:[], purchases:[], campaigns:[], employees:[], objectives:{}, logs:[], seq:1, orderSeq:1, poSeq:1 };
@@ -316,20 +338,39 @@ function log(action){
 }
 
 /* ================== PERSISTANCE ================== */
+let fbSyncing = false;   // true pendant qu'on applique une mise à jour distante
 async function loadAll(){
+  if (FB.ok && FB.ready){ try{ await FB.ready(); }catch(e){} }
   try{ const raw = await store.get(KEY); if(raw) S = JSON.parse(raw); }catch(e){}
   migrate();
+  // Si Firebase est vide (toute première utilisation), on y écrit l'état initial
+  if (FB.ok){
+    try{ const exists = await FB.get(); if(!exists) await save(); }catch(e){}
+  }
   try{ const rs = await store.get(KEY_SESSION); if(rs) session = JSON.parse(rs); }catch(e){}
   if (session && !me()) session = null;
   render();
+  // Écoute temps réel : tout changement venu d'un autre appareil rafraîchit l'écran
+  if (FB.ok){
+    FB.listen((blob, localWrite)=>{
+      if (localWrite) return; // c'est notre propre écriture, on ignore
+      try{
+        const incoming = JSON.parse(blob);
+        // on ne touche pas si on est en train d'éditer un formulaire sensible
+        S = incoming; migrate();
+        if (session && !me()) session = null;
+        fbSyncing = true; render(); fbSyncing = false;
+      }catch(e){ console.warn("sync:", e); }
+    });
+  }
 }
 async function save(){
   try{ await store.set(KEY, JSON.stringify(S)); }
   catch(e){ toast("⚠ Échec de la sauvegarde — exportez vos données"); }
 }
 async function saveSession(){
-  if (session) await store.set(KEY_SESSION, JSON.stringify(session));
-  else await store.del(KEY_SESSION);
+  if (session) await localStore.set(KEY_SESSION, JSON.stringify(session));
+  else await localStore.del(KEY_SESSION);
 }
 function migrate(){
   if (!S.version || S.version < 2) {
@@ -429,7 +470,7 @@ function kpis(){
 
 /* ================== VUES : AUTH ================== */
 function vSetup(){
-  return `<div class="login">
+  return `<div class="loginpage"><div class="login">
     <div class="wordmark">DISTRIVIA</div><div class="bar"></div><div class="sub">DISTRIBUTION GROUP</div>
     <h2 style="text-align:center;margin-top:16px">Première utilisation</h2>
     <p class="muted" style="text-align:center">Créez le compte administrateur (fondateur).</p>
@@ -439,17 +480,17 @@ function vSetup(){
     <label>Confirmer le mot de passe</label><input id="su-pass2" type="password" autocomplete="new-password">
     <button class="btn" id="su-go" style="width:100%;margin-top:14px">Créer le compte administrateur</button>
     ${store.mode==="memory" ? `<div class="alertbox" style="margin-top:12px">⚠ Stockage indisponible sur ce navigateur : les données seront perdues à la fermeture.</div>` : ""}
-  </div>`;
+  </div><div class="footnote">DISTRIVIA Distribution Group · Dakar · Sénégal</div></div>`;
 }
 function vLogin(){
-  return `<div class="login">
+  return `<div class="loginpage"><div class="login">
     <div class="wordmark">DISTRIVIA</div><div class="bar"></div><div class="sub">DISTRIBUTION GROUP</div>
     <h2 style="text-align:center;margin-top:16px">Connexion</h2>
     <label>Identifiant</label><input id="lg-login" autocomplete="username">
     <label>Mot de passe</label><input id="lg-pass" type="password" autocomplete="current-password">
     <button class="btn" id="lg-go" style="width:100%;margin-top:14px">Se connecter</button>
     <p class="muted" style="margin-top:12px;text-align:center">Compte créé par l'administrateur de DISTRIVIA.</p>
-  </div>`;
+  </div><div class="footnote">DISTRIVIA Distribution Group · Dakar · Sénégal</div></div>`;
 }
 
 /* ================== VUES : APP ================== */
@@ -820,11 +861,12 @@ function vUsers(){
 }
 
 function vBackup(){
-  const modeTxt = store.mode==="claude" ? "Application Claude (stockage du compte)" : store.mode==="local" ? "Navigateur de cet appareil (localStorage)" : "Mémoire temporaire ⚠";
+  const modeTxt = store.mode==="firebase" ? "Base de données en ligne Firebase (partagée, temps réel)" : store.mode==="claude" ? "Application Claude (stockage du compte)" : store.mode==="local" ? "Navigateur de cet appareil (localStorage)" : "Mémoire temporaire ⚠";
   return `
   <h2>Sauvegarde & export</h2>
   <div class="infobox"><b>Mode de stockage :</b> ${modeTxt}.<br>
-  ${store.mode==="local"?"Les données vivent dans <b>ce navigateur, sur cet appareil</b>. Elles survivent à la fermeture et au redémarrage, mais ne se synchronisent pas entre plusieurs téléphones/ordinateurs. Pour un vrai multi-appareils, il faudra une base de données en ligne (étape suivante).":""}</div>
+  ${store.mode==="firebase"?"✅ Les comptes et les données sont <b>partagés entre tous les appareils</b> et se synchronisent en temps réel. Un employé connecté sur son téléphone voit les mêmes données que vous. Gardez tout de même une sauvegarde hebdomadaire par précaution.":""}
+  ${store.mode==="local"?"Les données vivent dans <b>ce navigateur, sur cet appareil</b>. Elles survivent à la fermeture et au redémarrage, mais ne se synchronisent pas entre plusieurs téléphones/ordinateurs. Pour un vrai multi-appareils, configurez Firebase (voir le guide).":""}</div>
   <div class="panel">
     <p style="margin-bottom:10px">Sauvegarde automatique à chaque action. Par sécurité, <b>exportez une copie chaque lundi</b> et gardez-la sur Drive ou WhatsApp (à vous-même).</p>
     <div class="row">
