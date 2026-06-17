@@ -255,6 +255,7 @@ const COA = [
   ["627p","Publicité / marketing","charge"],
   ["646","Charges diverses","charge"],
   ["443","TVA facturée","passif"],
+  ["445","TVA déductible","actif"],
 ];
 const JOURNALS = { VE:"Ventes", AC:"Achats", BQ:"Banque", CA:"Caisse", OD:"Opérations diverses" };
 const KEY = "distrivia-erp-v1";
@@ -316,7 +317,7 @@ const store = {
 };
 
 /* ================== ÉTAT ================== */
-let S = { version:5, users:[], products:[], clients:[], orders:[], expenses:[], suppliers:[], purchases:[], campaigns:[], employees:[], objectives:{}, logs:[], seq:1, orderSeq:1, poSeq:1 };
+let S = { version:6, users:[], products:[], clients:[], orders:[], expenses:[], suppliers:[], purchases:[], campaigns:[], employees:[], objectives:{}, settings:{tvaRate:18,tvaEnabled:true,pricesTTC:true,ninea:"",rccm:""}, logs:[], seq:1, orderSeq:1, poSeq:1 };
 let session = null;      // {userId}
 let tab = "dash";
 let draft = null;
@@ -465,8 +466,23 @@ function migrate(){
     S.campaigns = S.campaigns || [];
     S.employees = S.employees || [];
   }
+  if (!S.version || S.version < 6) {
+    S.version = 6;
+    // Paramètres TVA (Sénégal : 18 %). Prix saisis = TTC par défaut.
+    S.settings = S.settings || {};
+    if(S.settings.tvaRate === undefined) S.settings.tvaRate = 18;
+    if(S.settings.tvaEnabled === undefined) S.settings.tvaEnabled = true;
+    if(S.settings.pricesTTC === undefined) S.settings.pricesTTC = true; // les prix produits incluent la TVA
+    if(S.settings.ninea === undefined) S.settings.ninea = "";
+    if(S.settings.rccm === undefined) S.settings.rccm = "";
+    // Commandes : assujetties à la TVA par défaut
+    (S.orders||[]).forEach(o=>{ if(o.tvaApplicable===undefined) o.tvaApplicable = true; });
+    // Achats : TVA déductible saisissable (par défaut le montant est TTC, TVA récupérable)
+    (S.purchases||[]).forEach(p=>{ if(p.tvaDeductible===undefined) p.tvaDeductible = true; });
+  }
   if (S.orderSeq === undefined) S.orderSeq = (S.orders?.length||0)+1;
   if (S.poSeq === undefined) S.poSeq = (S.purchases?.length||0)+1;
+  if (!S.settings) S.settings = { tvaRate:18, tvaEnabled:true, pricesTTC:true, ninea:"", rccm:"" };
 }
 
 /* Téléphone : helpers */
@@ -483,6 +499,26 @@ const orderTotal = o => o.lines.reduce((a,l)=>a+l.qty*l.price,0);
 const orderPaid  = o => (o.payments||[]).reduce((a,p)=>a+p.amount,0);
 const orderDue   = o => Math.max(0, orderTotal(o) - orderPaid(o));
 const orderCost  = o => o.lines.reduce((a,l)=>{ const p=S.products.find(p=>p.id===l.productId); return a+l.qty*(p?p.cost:0); },0);
+
+/* ===== TVA (Sénégal 18 % par défaut) — prix saisis = TTC ===== */
+function tvaRate(){ return (S.settings && S.settings.tvaEnabled) ? (S.settings.tvaRate||0) : 0; }
+// Pour une commande : décompose le TTC en HT + TVA (si la commande est assujettie)
+function orderTVA(o){
+  if(!o.tvaApplicable || !tvaRate()) return 0;
+  const ttc = orderTotal(o);
+  const ht = ttc / (1 + tvaRate()/100);
+  return ttc - ht;
+}
+function orderHT(o){
+  const ttc = orderTotal(o);
+  return (o.tvaApplicable && tvaRate()) ? ttc/(1+tvaRate()/100) : ttc;
+}
+// Pour un achat : TVA déductible incluse dans le montant (TTC)
+function purchaseTVA(p){
+  if(!p.tvaDeductible || !tvaRate()) return 0;
+  const ht = p.amount/(1+tvaRate()/100);
+  return p.amount - ht;
+}
 const clientName = id => S.clients.find(c=>c.id===id)?.name || "—";
 const prodName   = id => S.products.find(p=>p.id===id)?.name || "—";
 function refreshStatus(o){
@@ -596,21 +632,30 @@ function globalSearchHTML(){
     return `<div class="hsr-item" data-goorder="${o.id}"><b>${esc(o.num)}</b> · ${esc(clientName(o.clientId))} · ${fmt(orderTotal(o))}${due?` <span style="color:var(--terra)">— reste ${fmt(due)}</span>`:` <span style="color:var(--vert)">— soldée</span>`}</div>`;
   }).join(""); }
   if(ps.length){ h += `<div class="hsr-cat">Produits</div>` + ps.map(p=>
-    `<div class="hsr-item" data-goproduct="1"><b>${esc(p.name)}</b> · ${esc(p.family)} · stock ${p.stock} · ${fmt(p.price)}</div>`
+    `<div class="hsr-item" data-goproduct="${p.id}"><b>${esc(p.name)}</b> · ${esc(p.family)} · stock ${p.stock} · ${fmt(p.price)}</div>`
   ).join(""); }
   return h;
 }
 
 function bindSearchItems(){
   document.querySelectorAll("[data-goclient]").forEach(it=> it.onclick = ()=>{
-    const id=+it.dataset.goclient; searchQ=""; tab="clients"; render();
-    setTimeout(()=>{ highlightClient(id); }, 60);
+    const id=+it.dataset.goclient; searchQ="";
+    const gsr=el("hsearch-results"); if(gsr){ gsr.classList.remove("show"); gsr.innerHTML=""; }
+    const gs=el("globalsearch"); if(gs) gs.value="";
+    openClientDetail(id);
   });
   document.querySelectorAll("[data-goorder]").forEach(it=> it.onclick = ()=>{
-    const id=+it.dataset.goorder; searchQ=""; S.orders.forEach(o=>o.__hl=(o.id===id)); tab="orders"; render();
-    setTimeout(()=>{ S.orders.forEach(o=>delete o.__hl); const r=document.querySelector('tr[style*="FFF7E6"]'); if(r&&r.scrollIntoView) r.scrollIntoView({block:"center"}); }, 60);
+    const id=+it.dataset.goorder; searchQ="";
+    const gsr=el("hsearch-results"); if(gsr){ gsr.classList.remove("show"); gsr.innerHTML=""; }
+    const gs=el("globalsearch"); if(gs) gs.value="";
+    openOrderDetail(id);
   });
-  document.querySelectorAll("[data-goproduct]").forEach(it=> it.onclick = ()=>{ searchQ=""; tab="products"; render(); });
+  document.querySelectorAll("[data-goproduct]").forEach(it=> it.onclick = ()=>{
+    const id=+it.dataset.goproduct; searchQ="";
+    const gsr=el("hsearch-results"); if(gsr){ gsr.classList.remove("show"); gsr.innerHTML=""; }
+    const gs=el("globalsearch"); if(gs) gs.value="";
+    if(id && id!=="1") openProductDetail(id); else { tab="products"; render(); }
+  });
 }
 function highlightClient(id){
   const c=S.clients.find(c=>c.id===id); if(!c) return;
@@ -832,7 +877,7 @@ function vOrders(){
     if(!S.products.length || !S.clients.length){
       form = `<div class="panel"><p class="empty">Créez d'abord au moins un produit et un client.</p></div>`;
     } else {
-      if(!draft) draft = { clientId:S.clients[0].id, date:today(), payMode:"comptant", dueDate:"", lines:[] };
+      if(!draft) draft = { clientId:S.clients[0].id, date:today(), payMode:"comptant", dueDate:"", lines:[], tvaApplicable:true };
       const total = draft.lines.reduce((a,l)=>a+l.qty*l.price,0);
       const heading = isEdit ? "Modifier la commande "+esc(editOrder.num) : "Nouvelle commande — N° "+("CMD-"+String(S.orderSeq).padStart(4,"0"));
       // échéance max = date + 3 mois
@@ -843,6 +888,7 @@ function vOrders(){
         <div><label>Date</label><input id="o-date" type="date" value="${draft.date}"></div>
         <div><label>Paiement</label><select id="o-pay"><option value="comptant" ${draft.payMode==="comptant"?"selected":""}>Comptant</option><option value="credit" ${draft.payMode==="credit"?"selected":""}>Crédit (max 3 mois)</option></select></div>
         <div id="o-due-wrap" style="${draft.payMode==="credit"?"":"display:none"}"><label>Échéance de paiement (max 3 mois)</label><input id="o-due" type="date" value="${draft.dueDate||""}" max="${maxDue}" min="${draft.date}"></div>
+        ${tvaRate()?`<div><label>TVA (${tvaRate()} %)</label><select id="o-tva"><option value="1" ${draft.tvaApplicable!==false?"selected":""}>Soumise à la TVA (prix TTC)</option><option value="0" ${draft.tvaApplicable===false?"selected":""}>Non soumise à la TVA</option></select></div>`:""}
       </div>
       <h3>Lignes</h3>
       <div class="lines">
@@ -989,7 +1035,19 @@ function vBackup(){
     <h3>Contenu actuel</h3>
     <p>${S.products.length} produits · ${S.clients.length} clients · ${S.orders.length} commandes · ${S.expenses.length} dépenses · ${S.users.length} utilisateurs</p>
     <div class="row" style="margin-top:10px"><button class="btn sm" style="background:var(--rouge)" id="bk-reset">Tout effacer (irréversible)</button></div>
-  </div>`;
+  </div>
+  ${isAdmin()?`<div class="panel">
+    <h3>Paramètres TVA</h3>
+    <p class="muted" style="margin-bottom:10px">Au Sénégal, la TVA standard est de 18 %. Les prix de vente saisis sont considérés <b>TTC</b> (toutes taxes comprises) : la TVA est extraite automatiquement pour la comptabilité et la déclaration.</p>
+    <div class="grid2">
+      <div><label>TVA activée ?</label><select id="set-tvaen"><option value="1" ${S.settings.tvaEnabled?"selected":""}>Oui — assujetti à la TVA</option><option value="0" ${!S.settings.tvaEnabled?"selected":""}>Non — non assujetti</option></select></div>
+      <div><label>Taux de TVA (%)</label><input type="number" id="set-tvarate" value="${S.settings.tvaRate}" min="0" max="100" step="0.5"></div>
+      <div><label>NINEA (n° fiscal)</label><input id="set-ninea" value="${esc(S.settings.ninea||"")}" placeholder="Ex. 0071234567"></div>
+      <div><label>RCCM</label><input id="set-rccm" value="${esc(S.settings.rccm||"")}" placeholder="Ex. SN-DKR-2026-A-1234"></div>
+    </div>
+    <div class="row" style="margin-top:10px"><button class="btn" id="set-save">Enregistrer les paramètres</button></div>
+    <p class="muted" style="margin-top:8px">La déclaration de TVA et son export PDF se trouvent dans l'onglet <b>Comptabilité</b>.</p>
+  </div>`:""}`;
 }
 
 /* ================== MODALE ================== */
@@ -1033,7 +1091,7 @@ async function quickPay(id){
 function startEditOrder(id){
   if(!can("orders_edit")) return toast("Droit insuffisant");
   const o=S.orders.find(o=>o.id===id); if(!o) return;
-  editOrder = o; draft = { clientId:o.clientId, date:o.date, payMode:o.payMode, dueDate:o.dueDate||"", lines:o.lines.map(l=>({...l})) };
+  editOrder = o; draft = { clientId:o.clientId, date:o.date, payMode:o.payMode, dueDate:o.dueDate||"", lines:o.lines.map(l=>({...l})), tvaApplicable:o.tvaApplicable!==false };
   tab="orders"; render(); window.scrollTo(0,0);
 }
 
@@ -1047,10 +1105,11 @@ function openOrderDetail(id){
   const overdue = o.payMode==="credit" && o.dueDate && due>0 && o.dueDate<today();
   openModal(`<div class="row" style="justify-content:space-between"><h3>Commande ${esc(o.num)}</h3><button class="x" onclick="closeModal()">×</button></div>
     <div class="cards" style="margin-bottom:10px">
-      <div class="card"><div class="v" style="font-size:16px">${fmt(orderTotal(o))}</div><div class="l">Total</div></div>
+      <div class="card"><div class="v" style="font-size:16px">${fmt(orderTotal(o))}</div><div class="l">Total TTC</div></div>
       <div class="card g"><div class="v" style="font-size:16px">${fmt(paid)}</div><div class="l">Payé</div></div>
       <div class="card ${due?'t':''}"><div class="v" style="font-size:16px">${fmt(due)}</div><div class="l">Reste dû</div></div>
     </div>
+    ${orderTVA(o)>0?`<p class="muted" style="margin-bottom:6px">HT : ${fmt(orderHT(o))} · TVA (${tvaRate()} %) : ${fmt(orderTVA(o))} · TTC : ${fmt(orderTotal(o))}</p>`:`<p class="muted" style="margin-bottom:6px">${tvaRate()&&!o.tvaApplicable?"Commande non assujettie à la TVA":""}</p>`}
     <p style="margin-bottom:4px"><b>Client :</b> ${esc(c.name||"—")} ${c.phone?"· "+esc(c.phone):""} ${c.zone?"· "+esc(c.zone):""}</p>
     <p class="muted" style="margin-bottom:10px">Date ${o.date} · ${o.payMode==="credit"?"Crédit"+(o.dueDate?" éch. "+o.dueDate:""):"Comptant"} · Livraison : ${o.delivered?("livrée"+(o.deliveredDate?" le "+o.deliveredDate:"")+(o.deliveredBy?" par "+esc(o.deliveredBy):"")):"non livrée"} ${o.status==="cancelled"?'· <span style="color:var(--rouge)">ANNULÉE'+(o.cancelReason?" ("+esc(o.cancelReason)+")":"")+'</span>':""} ${overdue?'· <span style="color:var(--rouge)">⏰ échue</span>':""}</p>
     <h4 style="margin:8px 0 4px;color:var(--bleu)">Articles</h4>
@@ -1126,6 +1185,46 @@ function openSupplierDetail(id){
   const se=el("modal").querySelector("[data-md-sedit]"); if(se) se.onclick=()=>{ closeModal(); editSupplierId=+se.dataset.mdSedit; tab="suppliers"; render(); window.scrollTo(0,0); };
 }
 
+function openProductDetail(id){
+  const p = S.products.find(p=>p.id===id); if(!p) return;
+  // ventes de ce produit (commandes livrées non annulées)
+  const live = S.orders.filter(o=>o.status!=="cancelled" && o.delivered);
+  let qtyVendue=0, caGen=0, margeGen=0;
+  const recent=[];
+  S.orders.filter(o=>o.status!=="cancelled").sort((a,b)=>b.id-a.id).forEach(o=>{
+    const l=o.lines.find(l=>l.productId===id);
+    if(l){ if(o.delivered){ qtyVendue+=l.qty; caGen+=l.qty*l.price; margeGen+=l.qty*(l.price-(p.cost||0)); }
+      if(recent.length<8) recent.push({o,l}); }
+  });
+  const marge = p.price-(p.cost||0);
+  const margePct = p.price? Math.round(marge/p.price*100):0;
+  const stockLow = p.stock<=(p.alert||0);
+  const rows = recent.length? recent.map(({o,l})=>`<tr style="cursor:pointer" data-md-order="${o.id}"><td><b>${esc(o.num)}</b></td><td>${o.date}</td><td>${esc(clientName(o.clientId))}</td><td class="num">${l.qty}</td><td class="num">${fmt(l.qty*l.price)}</td></tr>`).join("") : `<tr><td colspan="5" class="empty">Aucune vente.</td></tr>`;
+  openModal(`<div class="row" style="justify-content:space-between"><h3>${esc(p.name)}</h3><button class="x" onclick="closeModal()">×</button></div>
+    <p class="muted">${esc(p.family||"—")}</p>
+    <div class="cards" style="margin:10px 0">
+      <div class="card ${stockLow?'t':''}"><div class="v" style="font-size:16px">${p.stock}</div><div class="l">En stock${stockLow?" ⚠":""}</div></div>
+      <div class="card"><div class="v" style="font-size:16px">${fmt(p.price)}</div><div class="l">Prix de vente</div></div>
+      <div class="card"><div class="v" style="font-size:16px">${fmt(p.cost||0)}</div><div class="l">Coût d'achat</div></div>
+      <div class="card g"><div class="v" style="font-size:16px">${margePct}%</div><div class="l">Marge unitaire</div></div>
+    </div>
+    <div class="cards" style="margin-bottom:6px">
+      <div class="card"><div class="v" style="font-size:16px">${qtyVendue}</div><div class="l">Quantité vendue</div></div>
+      <div class="card"><div class="v" style="font-size:16px">${fmt(caGen)}</div><div class="l">CA généré</div></div>
+      <div class="card g"><div class="v" style="font-size:16px">${fmt(margeGen)}</div><div class="l">Marge générée</div></div>
+      <div class="card"><div class="v" style="font-size:16px">${fmt(p.stock*(p.cost||0))}</div><div class="l">Valeur du stock</div></div>
+    </div>
+    ${stockLow?`<div class="alertbox">⚠ Stock bas (seuil d'alerte : ${p.alert||0}). Pensez à réapprovisionner.</div>`:""}
+    <h4 style="margin:8px 0 4px;color:var(--bleu)">Ventes récentes</h4>
+    <div class="tablewrap"><table><tr><th>N°</th><th>Date</th><th>Client</th><th class="num">Qté</th><th class="num">Montant</th></tr>${rows}</table></div>
+    <div class="row" style="margin-top:14px">
+      ${can("products_manage")?`<button class="btn ghost" data-md-pedit="${p.id}">Modifier le produit</button>`:""}
+      <button class="btn ghost" onclick="closeModal()">Fermer</button>
+    </div>`);
+  el("modal").querySelectorAll("[data-md-order]").forEach(r=> r.onclick=()=>openOrderDetail(+r.dataset.mdOrder));
+  const pe=el("modal").querySelector("[data-md-pedit]"); if(pe) pe.onclick=()=>{ closeModal(); tab="products"; render(); window.scrollTo(0,0); };
+}
+
 
 /* ================== MON PROFIL (changer mot de passe) ================== */
 function openProfile(){
@@ -1176,7 +1275,10 @@ function orderReceiptHTML(o){
     <table style="width:100%;border-collapse:collapse;font-size:12px"><tr style="background:#0F2A4A;color:#fff">
       <th style="padding:5px 6px;text-align:left">Produit</th><th style="padding:5px 6px;text-align:right">Qté</th><th style="padding:5px 6px;text-align:right">P.U.</th><th style="padding:5px 6px;text-align:right">Total</th></tr>
       ${rows}</table>
-    <div style="text-align:right;margin-top:8px;font-size:15px;font-weight:800;color:#0F2A4A">TOTAL : ${fmt(orderTotal(o))}</div>
+    ${orderTVA(o)>0?`<div style="margin-top:8px;font-size:12px;color:#555">
+      <div style="display:flex;justify-content:space-between"><span>Total HT</span><span>${fmt(orderHT(o))}</span></div>
+      <div style="display:flex;justify-content:space-between"><span>TVA ${tvaRate()} %</span><span>${fmt(orderTVA(o))}</span></div></div>`:""}
+    <div style="text-align:right;margin-top:8px;font-size:15px;font-weight:800;color:#0F2A4A">TOTAL ${orderTVA(o)>0?"TTC":""} : ${fmt(orderTotal(o))}</div>
     <div style="text-align:right;font-size:12px;color:#555">Payé : ${fmt(orderPaid(o))} · Reste dû : ${fmt(orderDue(o))}</div>
     <div style="margin-top:6px">${pays}</div>
     <div style="margin-top:16px;text-align:center;font-size:11px;color:#888;border-top:1px solid #eee;padding-top:8px">Merci de votre confiance — DISTRIVIA · Livraison 48 h sur Dakar</div>
@@ -1212,6 +1314,88 @@ function expenseReceiptHTML(e){
     <div style="margin-top:24px;font-size:11px;color:#888;text-align:center;border-top:1px solid #eee;padding-top:8px">DISTRIVIA · Document interne de caisse</div>
   </div>`;
 }
+
+/* ===== Déclaration TVA — document professionnel imprimable / PDF ===== */
+function tvaDeclarationHTML(from, to){
+  const d = computeTVA(from, to);
+  const rate = tvaRate();
+  const periodLabel = (from&&to) ? (frDate(from)+" au "+frDate(to)) : (from?("depuis le "+frDate(from)):(to?("jusqu'au "+frDate(to)):"toute la période"));
+  const moisRef = from? moisAnnee(from) : moisAnnee(today());
+  const st = S.settings||{};
+  const ligne = (lib,base,tva,strong)=>`<tr${strong?' style="font-weight:800;background:#F5F1E8"':''}>
+    <td style="padding:8px 10px;border-bottom:1px solid #eee">${lib}</td>
+    <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:right">${base!==null?fmt(base):""}</td>
+    <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:right">${tva!==null?fmt(tva):""}</td></tr>`;
+  return `<div style="max-width:680px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#1A1A1A;font-size:13px;padding:10px">
+    <!-- En-tête -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #C85E2D;padding-bottom:14px;margin-bottom:6px">
+      <div>
+        <div style="font-weight:800;letter-spacing:5px;font-size:26px;color:#0F2A4A">DISTRIVIA</div>
+        <div style="width:60px;height:3px;background:#C85E2D;margin:3px 0"></div>
+        <div style="font-size:9px;letter-spacing:3px;color:#888">DISTRIBUTION GROUP</div>
+        <div style="font-size:11px;color:#555;margin-top:8px;line-height:1.5">
+          Dakar · Sénégal<br>contact@distrivia.sn · +221 77 527 82 24
+          ${st.ninea?`<br>NINEA : ${esc(st.ninea)}`:""}${st.rccm?` · RCCM : ${esc(st.rccm)}`:""}
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div style="background:#0F2A4A;color:#fff;padding:10px 16px;border-radius:8px">
+          <div style="font-size:10px;letter-spacing:2px;opacity:.8">DÉCLARATION DE</div>
+          <div style="font-size:20px;font-weight:800;letter-spacing:1px">TVA</div>
+        </div>
+        <div style="font-size:12px;color:#555;margin-top:8px">Période : <b>${moisRef}</b></div>
+        <div style="font-size:11px;color:#888">${periodLabel}</div>
+        <div style="font-size:11px;color:#888">Taux : ${rate} %</div>
+      </div>
+    </div>
+
+    <!-- Bloc synthèse -->
+    <div style="display:flex;gap:10px;margin:18px 0">
+      <div style="flex:1;background:#F5F1E8;border-radius:10px;padding:14px;text-align:center">
+        <div style="font-size:10px;color:#888;letter-spacing:1px">TVA COLLECTÉE</div>
+        <div style="font-size:20px;font-weight:800;color:#2E6B3E">${fmt(d.collectee)}</div>
+        <div style="font-size:10px;color:#888">sur ventes</div>
+      </div>
+      <div style="flex:0 0 30px;display:flex;align-items:center;justify-content:center;font-size:22px;color:#888">−</div>
+      <div style="flex:1;background:#F5F1E8;border-radius:10px;padding:14px;text-align:center">
+        <div style="font-size:10px;color:#888;letter-spacing:1px">TVA DÉDUCTIBLE</div>
+        <div style="font-size:20px;font-weight:800;color:#C85E2D">${fmt(d.deductible)}</div>
+        <div style="font-size:10px;color:#888">sur achats</div>
+      </div>
+      <div style="flex:0 0 30px;display:flex;align-items:center;justify-content:center;font-size:22px;color:#888">=</div>
+      <div style="flex:1;background:${d.aPayer>=0?'#0F2A4A':'#2E6B3E'};color:#fff;border-radius:10px;padding:14px;text-align:center">
+        <div style="font-size:10px;opacity:.8;letter-spacing:1px">${d.aPayer>=0?"TVA À PAYER":"CRÉDIT TVA"}</div>
+        <div style="font-size:20px;font-weight:800">${fmt(Math.abs(d.aPayer))}</div>
+        <div style="font-size:10px;opacity:.8">${d.aPayer>=0?"à reverser":"à reporter"}</div>
+      </div>
+    </div>
+
+    <!-- Détail -->
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px">
+      <tr style="background:#0F2A4A;color:#fff">
+        <th style="padding:8px 10px;text-align:left">Rubrique</th>
+        <th style="padding:8px 10px;text-align:right">Base HT</th>
+        <th style="padding:8px 10px;text-align:right">Montant TVA</th></tr>
+      <tr><td colspan="3" style="padding:6px 10px;background:#eef2f7;font-weight:700;color:#0F2A4A">TVA collectée (opérations taxables)</td></tr>
+      ${ligne("Ventes taxables au taux de "+rate+" %", d.baseHT, d.collectee)}
+      ${d.ventesExo?ligne("Ventes exonérées / non assujetties", d.ventesExo, null):""}
+      <tr><td colspan="3" style="padding:6px 10px;background:#eef2f7;font-weight:700;color:#0F2A4A">TVA déductible (achats &amp; charges)</td></tr>
+      ${ligne("Achats et charges ouvrant droit à déduction", d.achatsHT, d.deductible)}
+      ${ligne(d.aPayer>=0?"TVA NETTE À PAYER":"CRÉDIT DE TVA À REPORTER", null, Math.abs(d.aPayer), true)}
+    </table>
+
+    <div style="margin-top:14px;font-size:11px;color:#666;line-height:1.6">
+      <b>Calcul :</b> TVA à payer = TVA collectée (${fmt(d.collectee)}) − TVA déductible (${fmt(d.deductible)}) = <b>${fmt(d.aPayer)}</b>.<br>
+      Document généré automatiquement par DISTRIVIA Gestion le ${frDate(today())}. À rapprocher de votre déclaration officielle (régime du réel, dépôt mensuel avant le 15 du mois suivant).
+    </div>
+    <div style="margin-top:26px;display:flex;justify-content:space-between;font-size:11px;color:#888">
+      <div style="border-top:1px solid #ccc;padding-top:6px;width:45%;text-align:center">Visa du responsable</div>
+      <div style="border-top:1px solid #ccc;padding-top:6px;width:45%;text-align:center">Cachet DISTRIVIA</div>
+    </div>
+  </div>`;
+}
+function frDate(d){ if(!d) return ""; const [y,m,j]=d.split("-"); return j+"/"+m+"/"+y; }
+function moisAnnee(d){ if(!d) return ""; const mois=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"]; const [y,m]=d.split("-"); return mois[(+m)-1]+" "+y; }
 
 /* ================== EXPORTS ================== */
 function dl(filename, blob){ const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=filename; a.click(); }
@@ -1366,12 +1550,14 @@ function vLogistics(){
 function buildEntries(from, to){
   const E = []; // {date, journal, num, label, lines:[{account, label, debit, credit}]}
   const inRange = d => (!from || d>=from) && (!to || d<=to);
-  // Ventes (à la livraison) : 411 Clients D / 701 Ventes C
+  // Ventes (à la livraison) : 411 Clients D (TTC) / 701 Ventes C (HT) / 443 TVA facturée C
   S.orders.filter(o=>o.status!=="cancelled" && o.delivered).forEach(o=>{
     if(inRange(o.date)){
-      const t=orderTotal(o);
-      E.push({date:o.date, journal:"VE", num:o.num, label:"Vente "+clientName(o.clientId),
-        lines:[{account:"411",label:"Client "+clientName(o.clientId),debit:t,credit:0},{account:"701",label:"Ventes marchandises",debit:0,credit:t}]});
+      const ttc=orderTotal(o); const tva=orderTVA(o); const ht=ttc-tva;
+      const lines=[{account:"411",label:"Client "+clientName(o.clientId),debit:ttc,credit:0},
+                   {account:"701",label:"Ventes marchandises",debit:0,credit:ht}];
+      if(tva>0) lines.push({account:"443",label:"TVA facturée",debit:0,credit:tva});
+      E.push({date:o.date, journal:"VE", num:o.num, label:"Vente "+clientName(o.clientId), lines});
     }
     // Encaissements : 521/571 D / 411 C
     (o.payments||[]).forEach(p=>{ if(inRange(p.date)){
@@ -1380,10 +1566,13 @@ function buildEntries(from, to){
         lines:[{account:acc,label:p.method||"Règlement",debit:p.amount,credit:0},{account:"411",label:"Client "+clientName(o.clientId),debit:0,credit:p.amount}]});
     }});
   });
-  // Achats : 601 D / 401 Fournisseurs C
+  // Achats : 601 Achats D (HT) / 445 TVA déductible D / 401 Fournisseurs C (TTC)
   S.purchases.forEach(p=>{ if(inRange(p.date)){ const s=S.suppliers.find(x=>x.id===p.supplierId);
-    E.push({date:p.date, journal:"AC", num:p.num, label:"Achat "+(s?s.name:""),
-      lines:[{account:"601",label:"Achats marchandises",debit:p.amount,credit:0},{account:"401",label:"Fournisseur "+(s?s.name:""),debit:0,credit:p.amount}]});
+    const tva=purchaseTVA(p); const ht=p.amount-tva;
+    const lines=[{account:"601",label:"Achats marchandises",debit:ht,credit:0}];
+    if(tva>0) lines.push({account:"445",label:"TVA déductible",debit:tva,credit:0});
+    lines.push({account:"401",label:"Fournisseur "+(s?s.name:""),debit:0,credit:p.amount});
+    E.push({date:p.date, journal:"AC", num:p.num, label:"Achat "+(s?s.name:""), lines});
   }});
   // Dépenses : 6xx D / 571 Caisse C
   const catAcc = {"Loyer":"622","Salaires":"661","Transport / carburant":"612","Achat marchandise":"601","Douane / transit":"641","Marketing":"627p","Administratif":"646","Autre":"646"};
@@ -1395,6 +1584,49 @@ function buildEntries(from, to){
   return E;
 }
 function accName(code){ const a=COA.find(c=>c[0]===code); return a?a[1]:code; }
+
+/* ===== Déclaration TVA ===== */
+function computeTVA(from, to){
+  const inRange = d => (!from || d>=from) && (!to || d<=to);
+  let baseHT=0, collectee=0, ventesExo=0, deductible=0, achatsHT=0;
+  S.orders.filter(o=>o.status!=="cancelled" && o.delivered && inRange(o.date)).forEach(o=>{
+    const tva=orderTVA(o); const ht=orderTotal(o)-tva;
+    if(tva>0){ baseHT+=ht; collectee+=tva; } else { ventesExo+=orderTotal(o); }
+  });
+  S.purchases.filter(p=>inRange(p.date)).forEach(p=>{
+    const tva=purchaseTVA(p); deductible+=tva; achatsHT+=p.amount-tva;
+  });
+  const aPayer = collectee - deductible;
+  return { baseHT, collectee, ventesExo, deductible, achatsHT, aPayer };
+}
+function tvaDeclarationPanel(f,t){
+  if(!(S.settings && S.settings.tvaEnabled)) return `<div class="panel"><h3>Déclaration de TVA</h3><p class="muted">La TVA est désactivée. Activez-la dans l'onglet <b>Sauvegarde → Paramètres TVA</b> pour générer les déclarations.</p></div>`;
+  const d = computeTVA(f,t);
+  const rate = tvaRate();
+  return `
+  <div class="panel">
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
+      <h3 style="margin:0">📋 Déclaration de TVA (${rate} %)</h3>
+      <button class="btn sm b" id="tva-pdf">Exporter la déclaration (PDF)</button>
+    </div>
+    <p class="muted" style="margin-bottom:10px">Période : ${f||"depuis le début"} → ${t||"aujourd'hui"}. ${f&&t?"":"⚠ Définissez une période ci-dessus pour une déclaration mensuelle officielle."}</p>
+    <div class="cards">
+      <div class="card"><div class="v" style="font-size:16px">${fmt(d.baseHT)}</div><div class="l">Base imposable (HT)</div></div>
+      <div class="card g"><div class="v" style="font-size:16px">${fmt(d.collectee)}</div><div class="l">TVA collectée (ventes)</div></div>
+      <div class="card t"><div class="v" style="font-size:16px">${fmt(d.deductible)}</div><div class="l">TVA déductible (achats)</div></div>
+      <div class="card ${d.aPayer>=0?'r':'g'}"><div class="v" style="font-size:16px">${fmt(Math.abs(d.aPayer))}</div><div class="l">${d.aPayer>=0?"TVA à payer":"Crédit de TVA"}</div></div>
+    </div>
+    <div class="tablewrap" style="margin-top:10px"><table>
+      <tr><th>Élément</th><th class="num">Base HT</th><th class="num">TVA</th></tr>
+      <tr><td>Ventes taxables (TVA ${rate} %)</td><td class="num">${fmt(d.baseHT)}</td><td class="num">${fmt(d.collectee)}</td></tr>
+      ${d.ventesExo?`<tr><td>Ventes exonérées / non assujetties</td><td class="num">${fmt(d.ventesExo)}</td><td class="num">—</td></tr>`:""}
+      <tr><td>Achats &amp; charges (TVA déductible)</td><td class="num">${fmt(d.achatsHT)}</td><td class="num">${fmt(d.deductible)}</td></tr>
+      <tr style="font-weight:800;background:var(--creme)"><td>${d.aPayer>=0?"TVA NETTE À PAYER":"CRÉDIT DE TVA À REPORTER"}</td><td class="num"></td><td class="num" style="color:${d.aPayer>=0?'var(--rouge)':'var(--vert)'}">${fmt(Math.abs(d.aPayer))}</td></tr>
+    </table></div>
+    <p class="muted" style="margin-top:8px">TVA à payer = TVA collectée − TVA déductible. Au Sénégal, la déclaration se dépose mensuellement (avant le 15 du mois suivant).</p>
+  </div>`;
+}
+
 function vAccounting(){
   const f = acctFrom(); const t = acctTo();
   const E = buildEntries(f,t);
@@ -1411,6 +1643,8 @@ function vAccounting(){
     <button class="btn sm b" id="exp-accounting-xlsx">Export Excel</button>
     <button class="btn sm ghost" id="exp-accounting-pdf">Export PDF</button>
   </div><p class="muted" style="margin-top:6px">Écritures générées automatiquement depuis les ventes, encaissements, achats et dépenses. Plan de comptes SYSCOHADA simplifié.</p></div>
+
+  ${tvaDeclarationPanel(f,t)}
 
   <div class="panel"><h3>Journal des écritures (${E.length})</h3><div class="tablewrap"><table>
     <tr><th>Date</th><th>Jrnl</th><th>Pièce</th><th>Compte</th><th>Libellé</th><th class="num">Débit</th><th class="num">Crédit</th></tr>
@@ -1966,6 +2200,7 @@ function bindApp(){
     el("o-date").onchange = e=>{ draft.date=e.target.value; };
     el("o-pay").onchange = e=>{ draft.payMode=e.target.value; const w=el("o-due-wrap"); if(w) w.style.display = e.target.value==="credit"?"":"none"; };
     const oDue = el("o-due"); if(oDue) oDue.onchange = e=>{ draft.dueDate=e.target.value; };
+    const oTva = el("o-tva"); if(oTva) oTva.onchange = e=>{ draft.tvaApplicable = e.target.value==="1"; };
     el("o-addline").onclick = ()=>{ const p=S.products[0]; draft.lines.push({productId:p.id, qty:1, price:p.price}); render(); };
     document.querySelectorAll("[data-lprod]").forEach(s=> s.onchange = e=>{
       const i=+s.dataset.lprod, pid=+e.target.value, p=S.products.find(p=>p.id===pid);
@@ -1992,12 +2227,13 @@ function bindApp(){
           draft.lines.forEach(l=>{ const p=S.products.find(p=>p.id===l.productId); if(p) p.stock=Math.max(0,p.stock-l.qty); });
         }
         o.clientId=draft.clientId; o.date=draft.date; o.payMode=draft.payMode; o.lines=draft.lines; o.dueDate=dueDate;
+        o.tvaApplicable = draft.tvaApplicable!==false;
         refreshStatus(o);
         log("Commande modifiée : "+o.num);
         editOrder=null; draft=null; await save(); render(); toast("Commande "+o.num+" modifiée ✓");
       } else {
         const num = "CMD-" + String(S.orderSeq++).padStart(4,"0");
-        S.orders.push({ id:nid(), num, date:draft.date, clientId:draft.clientId, payMode:draft.payMode, dueDate, lines:draft.lines, status:"pending", delivered:false, payments:[], createdBy:me().name });
+        S.orders.push({ id:nid(), num, date:draft.date, clientId:draft.clientId, payMode:draft.payMode, dueDate, lines:draft.lines, status:"pending", delivered:false, payments:[], createdBy:me().name, tvaApplicable: draft.tvaApplicable!==false });
         log("Commande créée : "+num+" — "+clientName(draft.clientId)+" ("+fmt(draft.lines.reduce((a,l)=>a+l.qty*l.price,0))+")");
         draft=null; await save(); render(); toast("Commande "+num+" enregistrée ✓");
       }
@@ -2183,6 +2419,8 @@ function bindApp(){
   // ===== Périodes Comptabilité / Contrôle =====
   const acApply = el("ac-apply");
   if(acApply) acApply.onclick = ()=>{ acctPeriod={from:el("ac-from").value, to:el("ac-to").value}; render(); };
+  const tvaPdf = el("tva-pdf");
+  if(tvaPdf) tvaPdf.onclick = ()=> printHTML(tvaDeclarationHTML(acctFrom(), acctTo()));
   const ctApply = el("ct-apply");
   if(ctApply) ctApply.onclick = ()=>{ ctrlPeriod={from:el("ct-from").value, to:el("ct-to").value}; render(); };
 
@@ -2261,6 +2499,16 @@ function bindApp(){
   [["hr","xlsx"],["hr","csv"],["hr","pdf"]].forEach(([k,f])=>{ const b=el("exp-"+k+"-"+f); if(b) b.onclick=()=>exportData("hr",f); });
 
   // Sauvegarde
+  const setSave = el("set-save");
+  if(setSave) setSave.onclick = async ()=>{
+    S.settings = S.settings || {};
+    S.settings.tvaEnabled = el("set-tvaen").value==="1";
+    S.settings.tvaRate = +el("set-tvarate").value||0;
+    S.settings.ninea = el("set-ninea").value.trim();
+    S.settings.rccm = el("set-rccm").value.trim();
+    log("Paramètres TVA mis à jour");
+    await save(); render(); toast("Paramètres TVA enregistrés ✓");
+  };
   const bkE = el("bk-export");
   if(bkE){
     bkE.onclick = ()=>{
@@ -2291,7 +2539,7 @@ function bindApp(){
     el("bk-reset").onclick = async ()=>{
       if(!confirm("Effacer TOUTES les données (y compris les comptes) ? Irréversible."))return;
       if(!confirm("Vraiment sûr ? Exportez d'abord une sauvegarde."))return;
-      S={version:5, users:[], products:[], clients:[], orders:[], expenses:[], suppliers:[], purchases:[], campaigns:[], employees:[], objectives:{}, logs:[], seq:1, orderSeq:1, poSeq:1};
+      S={version:6, users:[], products:[], clients:[], orders:[], expenses:[], suppliers:[], purchases:[], campaigns:[], employees:[], objectives:{}, settings:{tvaRate:18,tvaEnabled:true,pricesTTC:true,ninea:"",rccm:""}, logs:[], seq:1, orderSeq:1, poSeq:1};
       session=null; await save(); await saveSession(); render();
     };
   }
