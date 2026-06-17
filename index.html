@@ -39,6 +39,9 @@
   h3{color:var(--terra); font-size:13.5px; margin:14px 0 8px; text-transform:uppercase; letter-spacing:1px;}
   .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:16px;}
   .card{background:#fff; border-radius:10px; padding:13px; box-shadow:0 1px 4px rgba(15,42,74,.10);}
+  .nav-card{cursor:pointer; transition:transform .12s, box-shadow .12s;}
+  .nav-card:hover{transform:translateY(-2px); box-shadow:0 6px 18px rgba(15,42,74,.18);}
+  .nav-card .l{color:var(--terra);}
   .card .v{font-size:20px; font-weight:800; color:var(--bleu);}
   .card .l{font-size:11.5px; color:var(--gris); margin-top:2px;}
   .card.t .v{color:var(--terra);} .card.g .v{color:var(--vert);} .card.r .v{color:var(--rouge);}
@@ -191,6 +194,16 @@ window.DISTRIVIA_FB = {
     if(!FB_OK) return;
     try{ await firebase.firestore().collection(name).doc(id).update(patch); }
     catch(e){ console.warn("updateDoc:", e); }
+  },
+  async setDoc(name, id, data){
+    if(!FB_OK) return;
+    try{ await firebase.firestore().collection(name).doc(id).set(data); }
+    catch(e){ console.warn("setDoc:", e); }
+  },
+  async deleteDoc(name, id){
+    if(!FB_OK) return;
+    try{ await firebase.firestore().collection(name).doc(id).delete(); }
+    catch(e){ console.warn("deleteDoc:", e); }
   }
 };
 </script>
@@ -317,7 +330,7 @@ const store = {
 };
 
 /* ================== ÉTAT ================== */
-let S = { version:6, users:[], products:[], clients:[], orders:[], expenses:[], suppliers:[], purchases:[], campaigns:[], employees:[], objectives:{}, settings:{tvaRate:18,tvaEnabled:true,pricesTTC:true,ninea:"",rccm:""}, logs:[], seq:1, orderSeq:1, poSeq:1 };
+let S = { version:8, users:[], products:[], clients:[], orders:[], expenses:[], suppliers:[], purchases:[], campaigns:[], employees:[], announcements:[], objectives:{}, settings:{tvaRate:18,tvaEnabled:true,pricesTTC:true,ninea:"",rccm:"",loyaltyEnabled:true,loyaltyRate:1,loyaltyPer:1000}, logs:[], seq:1, orderSeq:1, poSeq:1, invoiceSeq:1 };
 let session = null;      // {userId}
 let tab = "dash";
 let draft = null;
@@ -327,6 +340,7 @@ let editClientId = null;  // client en cours d'édition
 let editSupplierId = null;
 let editCampaignId = null;
 let editEmployeeId = null;
+let editAnnId = null;
 let modalContent = null;  // contenu de la modale active
 let searchQ = "";
 // Périodes (filtres) — par défaut depuis le début de l'année
@@ -480,9 +494,29 @@ function migrate(){
     // Achats : TVA déductible saisissable (par défaut le montant est TTC, TVA récupérable)
     (S.purchases||[]).forEach(p=>{ if(p.tvaDeductible===undefined) p.tvaDeductible = true; });
   }
+  if (!S.version || S.version < 7) {
+    S.version = 7;
+    S.announcements = S.announcements || []; // notes/promos publiées vers le portail
+  }
+  if (!S.version || S.version < 8) {
+    S.version = 8;
+    // Facturation
+    if(S.invoiceSeq === undefined) S.invoiceSeq = 1;
+    // Programme de fidélité
+    S.settings = S.settings || {};
+    if(S.settings.loyaltyEnabled === undefined) S.settings.loyaltyEnabled = true;
+    if(S.settings.loyaltyRate === undefined) S.settings.loyaltyRate = 1; // 1 point par tranche de loyaltyPer FCFA
+    if(S.settings.loyaltyPer === undefined) S.settings.loyaltyPer = 1000; // 1 point / 1000 F livrés
+    (S.clients||[]).forEach(c=>{ if(c.points===undefined) c.points = 0; });
+    // Messagerie (réclamations enrichies en conversation) : champ replies[]
+  }
   if (S.orderSeq === undefined) S.orderSeq = (S.orders?.length||0)+1;
   if (S.poSeq === undefined) S.poSeq = (S.purchases?.length||0)+1;
+  if (S.invoiceSeq === undefined) S.invoiceSeq = 1;
   if (!S.settings) S.settings = { tvaRate:18, tvaEnabled:true, pricesTTC:true, ninea:"", rccm:"" };
+  if (S.settings.loyaltyEnabled === undefined){ S.settings.loyaltyEnabled=true; S.settings.loyaltyRate=1; S.settings.loyaltyPer=1000; }
+  if (!S.announcements) S.announcements = [];
+  (S.clients||[]).forEach(c=>{ if(c.points===undefined) c.points=0; });
 }
 
 /* Téléphone : helpers */
@@ -726,11 +760,16 @@ function vWebOrders(){
       <td>${a.status==="pending"?`<button class="btn sm b" data-webappt="${esc(a._id)}">Confirmer</button>`:`<span class="badge paid">OK</span>`}</td></tr>`).join("")}
     </table></div>`:`<p class="empty">Aucun rendez-vous.</p>`}
     </div>
-    <div class="panel"><h3>⚠ Réclamations (${webClaims.length})</h3>
-    ${webClaims.length?`<div class="tablewrap"><table><tr><th>Client</th><th>Objet</th><th></th></tr>
-      ${[...webClaims].sort((a,b)=>(a.created<b.created?1:-1)).map(c=>`<tr><td>${esc(c.author_name||"")}<div class="muted">${esc((c.message||"").slice(0,50))}${(c.message||"").length>50?"…":""}</div></td><td class="muted">${esc(c.type||"")}${c.ref?`<br>${esc(c.ref)}`:""}</td>
-      <td>${c.status==="pending"?`<button class="btn sm b" data-webclaim="${esc(c._id)}">Traiter</button>`:`<span class="badge paid">Traitée</span>`}</td></tr>`).join("")}
-    </table></div>`:`<p class="empty">Aucune réclamation.</p>`}
+    <div class="panel"><h3>💬 Messages & réclamations clients (${webClaims.length})</h3>
+    ${webClaims.length?`<div class="tablewrap"><table><tr><th>Client</th><th>Objet</th><th>État</th><th></th></tr>
+      ${[...webClaims].sort((a,b)=>(a.created<b.created?1:-1)).map(c=>{
+        const nrep=(c.replies||[]).length;
+        return `<tr><td>${esc(c.author_name||"")}<div class="muted">${esc((c.message||"").slice(0,45))}${(c.message||"").length>45?"…":""}</div></td>
+        <td class="muted">${esc(c.type||"")}${c.ref?`<br>${esc(c.ref)}`:""}${nrep?`<br><span style="color:var(--vert)">${nrep} réponse(s)</span>`:""}</td>
+        <td>${c.status==="resolved"?'<span class="badge paid">Traitée</span>':'<span class="badge pending">Ouverte</span>'}</td>
+        <td><button class="btn sm b" data-webreply="${esc(c._id)}">💬 Répondre</button></td></tr>`;
+      }).join("")}
+    </table></div>`:`<p class="empty">Aucun message.</p>`}
     </div>
   </div>
 
@@ -750,12 +789,12 @@ function vDash(){
   return `
   <h2>Tableau de bord — ${new Date().toLocaleDateString("fr-FR",{month:"long",year:"numeric"})}</h2>
   <div class="cards">
-    <div class="card"><div class="v">${fmt(k.caMonth)}</div><div class="l">CA du mois (livré)</div></div>
-    <div class="card g"><div class="v">${fmt(k.margeMonth)}</div><div class="l">Marge brute du mois</div></div>
-    <div class="card"><div class="v">${fmt(k.encMonth)}</div><div class="l">Encaissé ce mois</div></div>
-    <div class="card t"><div class="v">${fmt(k.credit)}</div><div class="l">Crédit client en cours</div></div>
-    <div class="card"><div class="v">${fmt(k.stockValue)}</div><div class="l">Valeur du stock (coût)</div></div>
-    <div class="card ${k.solde<0?'r':'g'}"><div class="v">${fmt(k.solde)}</div><div class="l">Solde de caisse</div></div>
+    <div class="card nav-card" data-gotab="accounting"><div class="v">${fmt(k.caMonth)}</div><div class="l">CA du mois (livré) ›</div></div>
+    <div class="card g nav-card" data-gotab="control"><div class="v">${fmt(k.margeMonth)}</div><div class="l">Marge brute du mois ›</div></div>
+    <div class="card nav-card" data-gotab="cash"><div class="v">${fmt(k.encMonth)}</div><div class="l">Encaissé ce mois ›</div></div>
+    <div class="card t nav-card" data-gotab="orders"><div class="v">${fmt(k.credit)}</div><div class="l">Crédit client en cours ›</div></div>
+    <div class="card nav-card" data-gotab="products"><div class="v">${fmt(k.stockValue)}</div><div class="l">Valeur du stock (coût) ›</div></div>
+    <div class="card ${k.solde<0?'r':'g'} nav-card" data-gotab="cash"><div class="v">${fmt(k.solde)}</div><div class="l">Solde de caisse ›</div></div>
   </div>
   ${overdue.length?`<div class="alertbox"><b>⏰ ${overdue.length} crédit(s) échu(s) :</b> ${overdue.slice(0,5).map(o=>esc(o.num)+" — "+esc(clientName(o.clientId))+" ("+fmt(orderDue(o))+", éch. "+o.dueDate+")").join(" · ")} — relancer les clients.</div>`:""}
   ${k.alerts.length?`<div class="alertbox"><b>⚠ Stock bas :</b> ${k.alerts.map(p=>esc(p.name)+" ("+p.stock+")").join(" · ")} — réassort à anticiper.</div>`:""}
@@ -1047,6 +1086,17 @@ function vBackup(){
     </div>
     <div class="row" style="margin-top:10px"><button class="btn" id="set-save">Enregistrer les paramètres</button></div>
     <p class="muted" style="margin-top:8px">La déclaration de TVA et son export PDF se trouvent dans l'onglet <b>Comptabilité</b>.</p>
+  </div>
+  <div class="panel">
+    <h3>Programme de fidélité ⭐</h3>
+    <p class="muted" style="margin-bottom:10px">Récompensez vos clients : chaque commande livrée crédite automatiquement des points, visibles sur leur fiche et sur le portail.</p>
+    <div class="grid2">
+      <div><label>Fidélité activée ?</label><select id="set-loyen"><option value="1" ${S.settings.loyaltyEnabled?"selected":""}>Oui</option><option value="0" ${!S.settings.loyaltyEnabled?"selected":""}>Non</option></select></div>
+      <div><label>Points par tranche</label><input type="number" id="set-loyrate" value="${S.settings.loyaltyRate||1}" min="1"></div>
+      <div><label>Tranche (FCFA) = 1 attribution</label><input type="number" id="set-loyper" value="${S.settings.loyaltyPer||1000}" min="100" step="100"></div>
+    </div>
+    <p class="muted" style="margin-top:8px">Exemple : ${S.settings.loyaltyRate||1} point(s) par ${fmt(S.settings.loyaltyPer||1000)} de commande livrée. Une commande de 50 000 F = ${Math.floor(50000/(S.settings.loyaltyPer||1000))*(S.settings.loyaltyRate||1)} points.</p>
+    <div class="row" style="margin-top:10px"><button class="btn" id="set-loysave">Enregistrer la fidélité</button></div>
   </div>`:""}`;
 }
 
@@ -1066,6 +1116,12 @@ async function deliverOrder(id){
   o.delivered=true; o.deliveredDate=today(); o.deliveredBy=me().name;
   refreshStatus(o);
   log("Commande livrée : "+o.num);
+  // Programme de fidélité : créditer les points au client
+  if(S.settings && S.settings.loyaltyEnabled && !o.pointsAwarded){
+    const per = S.settings.loyaltyPer||1000, rate = S.settings.loyaltyRate||1;
+    const pts = Math.floor(orderTotal(o)/per)*rate;
+    if(pts>0){ const c=S.clients.find(c=>c.id===o.clientId); if(c){ c.points=(c.points||0)+pts; o.pointsAwarded=pts; log("Fidélité : +"+pts+" pts à "+c.name); } }
+  }
   if(o.payMode==="comptant" && can("orders_pay")){
     o.payments.push({id:nid(), date:today(), amount:orderDue(o), method:"Espèces", by:me().name});
     log("Versement encaissé : "+o.num+" (comptant, soldée)");
@@ -1094,6 +1150,14 @@ function startEditOrder(id){
   editOrder = o; draft = { clientId:o.clientId, date:o.date, payMode:o.payMode, dueDate:o.dueDate||"", lines:o.lines.map(l=>({...l})), tvaApplicable:o.tvaApplicable!==false };
   tab="orders"; render(); window.scrollTo(0,0);
 }
+function startNewOrderFor(clientId){
+  if(!can("orders_create")) return toast("Droit insuffisant");
+  if(!S.products.length) return toast("Créez d'abord au moins un produit");
+  editOrder = null;
+  draft = { clientId: clientId, date:today(), payMode:"comptant", dueDate:"", lines:[], tvaApplicable:true };
+  closeModal(); tab="orders"; render(); window.scrollTo(0,0);
+}
+window.startNewOrderFor = startNewOrderFor;
 
 /* ================== FICHES DÉTAIL (cliquables) ================== */
 function openOrderDetail(id){
@@ -1121,6 +1185,7 @@ function openOrderDetail(id){
       ${due>0&&o.status!=="cancelled"&&can("orders_pay")?`<button class="btn" data-md-pay="${o.id}">Encaisser</button>`:""}
       ${o.status!=="cancelled"&&can("orders_edit")?`<button class="btn ghost" data-md-edit="${o.id}">Modifier</button>`:""}
       <button class="btn ghost" data-md-receipt="${o.id}">Reçu / imprimer</button>
+      <button class="btn b" data-md-invoice="${o.id}">📄 Facture</button>
       <button class="btn ghost" onclick="closeModal()">Fermer</button>
     </div>`);
   // handlers internes de la modale
@@ -1129,6 +1194,7 @@ function openOrderDetail(id){
   if(q("[data-md-pay]")) q("[data-md-pay]").onclick=()=>{ closeModal(); quickPay(o.id); };
   if(q("[data-md-edit]")) q("[data-md-edit]").onclick=()=>{ closeModal(); startEditOrder(o.id); };
   if(q("[data-md-receipt]")) q("[data-md-receipt]").onclick=()=>{ printHTML(orderReceiptHTML(o)); };
+  if(q("[data-md-invoice]")) q("[data-md-invoice]").onclick=async ()=>{ assignInvoiceNum(o); await save(); printHTML(invoiceHTML(o)); };
 }
 
 function openClientDetail(id){
@@ -1148,17 +1214,20 @@ function openClientDetail(id){
       <div class="card t"><div class="v" style="font-size:16px">${fmt(credit)}</div><div class="l">Crédit en cours</div></div>
       <div class="card"><div class="v" style="font-size:16px">${nbCmd}</div><div class="l">Commandes</div></div>
       <div class="card"><div class="v" style="font-size:16px">${fmt(panier)}</div><div class="l">Panier moyen</div></div>
+      ${S.settings&&S.settings.loyaltyEnabled?`<div class="card t"><div class="v" style="font-size:16px">${c.points||0}</div><div class="l">Points fidélité ⭐</div></div>`:""}
     </div>
     ${overdue.length?`<div class="alertbox">⏰ ${overdue.length} crédit(s) échu(s) : ${overdue.map(o=>esc(o.num)+" ("+fmt(orderDue(o))+")").join(", ")}</div>`:""}
     <p class="muted" style="margin-bottom:6px">Dernière commande : ${lastDate}</p>
     <h4 style="margin:8px 0 4px;color:var(--bleu)">Historique des commandes</h4>
     <div class="tablewrap"><table><tr><th>N°</th><th>Date</th><th class="num">Total</th><th class="num">Dû</th><th>Statut</th></tr>${rows}</table></div>
     <div class="row" style="margin-top:14px">
-      ${c.phone?`<a class="btn b" href="https://wa.me/${esc((c.dial+c.local).replace(/[^\d]/g,""))}" target="_blank">Écrire sur WhatsApp</a>`:""}
+      ${can("orders_create")?`<button class="btn b" data-md-neworder="${c.id}">+ Nouvelle commande</button>`:""}
+      ${c.phone?`<a class="btn outline" href="https://wa.me/${esc((c.dial+c.local).replace(/[^\d]/g,""))}" target="_blank">WhatsApp</a>`:""}
       ${can("clients_edit")||can("clients_manage")?`<button class="btn ghost" data-md-cedit="${c.id}">Modifier la fiche</button>`:""}
       <button class="btn ghost" onclick="closeModal()">Fermer</button>
     </div>`);
   el("modal").querySelectorAll("[data-md-order]").forEach(r=> r.onclick=()=>openOrderDetail(+r.dataset.mdOrder));
+  const no=el("modal").querySelector("[data-md-neworder]"); if(no) no.onclick=()=>startNewOrderFor(+no.dataset.mdNeworder);
   const ce=el("modal").querySelector("[data-md-cedit]"); if(ce) ce.onclick=()=>{ closeModal(); editClientId=+ce.dataset.mdCedit; tab="clients"; render(); window.scrollTo(0,0); };
 }
 
@@ -1225,6 +1294,44 @@ function openProductDetail(id){
   const pe=el("modal").querySelector("[data-md-pedit]"); if(pe) pe.onclick=()=>{ closeModal(); tab="products"; render(); window.scrollTo(0,0); };
 }
 
+/* ================== MESSAGERIE (réclamations → conversation) ================== */
+function openClaimThread(id){
+  const c = webClaims.find(x=>x._id===id); if(!c) return;
+  const replies = c.replies||[];
+  const thread = `
+    <div style="background:#F5F1E8;border-radius:8px;padding:10px;margin:4px 0">
+      <div style="font-size:11px;color:#888">${esc(c.author_name||"Client")} · ${(c.created||"").slice(0,16).replace("T"," ")}</div>
+      <div style="margin-top:3px">${esc(c.message||"")}</div>
+    </div>
+    ${replies.map(r=>`<div style="background:${r.from==="DISTRIVIA"?"#0F2A4A":"#F5F1E8"};color:${r.from==="DISTRIVIA"?"#fff":"#1A1A1A"};border-radius:8px;padding:10px;margin:4px 0;${r.from==="DISTRIVIA"?"margin-left:30px":"margin-right:30px"}">
+      <div style="font-size:11px;opacity:.8">${esc(r.from)} · ${(r.date||"").slice(0,16).replace("T"," ")}</div>
+      <div style="margin-top:3px">${esc(r.text)}</div></div>`).join("")}`;
+  openModal(`<div class="row" style="justify-content:space-between"><h3>💬 ${esc(c.author_name||"Client")}</h3><button class="x" onclick="closeModal()">×</button></div>
+    <p class="muted">${esc(c.type||"Message")}${c.ref?" · réf. "+esc(c.ref):""} · <span class="badge ${c.status==="resolved"?"paid":"pending"}">${c.status==="resolved"?"Traitée":"Ouverte"}</span></p>
+    <div style="max-height:40vh;overflow:auto;margin:10px 0">${thread}</div>
+    <label>Votre réponse</label><textarea id="cl-reply" rows="3" placeholder="Écrivez votre réponse au client..."></textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="btn b" id="cl-send">Envoyer la réponse</button>
+      <button class="btn ghost" id="cl-resolve">${c.status==="resolved"?"Rouvrir":"Marquer traitée"}</button>
+      <button class="btn ghost" onclick="closeModal()">Fermer</button>
+    </div>`);
+  const send = el("modal").querySelector("#cl-send");
+  if(send) send.onclick = async ()=>{
+    const txt = el("cl-reply").value.trim(); if(!txt) return toast("Écrivez une réponse");
+    const newReplies = [...(c.replies||[]), { from:"DISTRIVIA", text:txt, date:now(), by:me().name }];
+    if(FB.updateDoc) await FB.updateDoc("portal_claims", c._id, { replies:newReplies, status:"answered" });
+    c.replies = newReplies; c.status="answered";
+    log("Réponse envoyée à "+(c.author_name||"client"));
+    toast("Réponse envoyée ✓"); openClaimThread(id);
+  };
+  const resolve = el("modal").querySelector("#cl-resolve");
+  if(resolve) resolve.onclick = async ()=>{
+    const ns = c.status==="resolved" ? "pending" : "resolved";
+    if(FB.updateDoc) await FB.updateDoc("portal_claims", c._id, { status:ns });
+    c.status=ns; toast(ns==="resolved"?"Marquée traitée ✓":"Rouverte"); openClaimThread(id);
+  };
+}
+
 
 /* ================== MON PROFIL (changer mot de passe) ================== */
 function openProfile(){
@@ -1284,6 +1391,69 @@ function orderReceiptHTML(o){
     <div style="margin-top:16px;text-align:center;font-size:11px;color:#888;border-top:1px solid #eee;padding-top:8px">Merci de votre confiance — DISTRIVIA · Livraison 48 h sur Dakar</div>
   </div>`;
 }
+function assignInvoiceNum(o){
+  if(!o.invoiceNum){ o.invoiceNum = "FAC-"+new Date().getFullYear()+"-"+String(S.invoiceSeq++).padStart(4,"0"); }
+  return o.invoiceNum;
+}
+function invoiceHTML(o){
+  const c = S.clients.find(c=>c.id===o.clientId)||{};
+  const st = S.settings||{};
+  const num = o.invoiceNum || "FAC-(à générer)";
+  const ttc=orderTotal(o), tva=orderTVA(o), ht=ttc-tva, paid=orderPaid(o), due=orderDue(o);
+  const rows = o.lines.map(l=>{
+    const puTTC=l.price, lineTTC=l.qty*l.price;
+    const puHT = tva>0 ? puTTC/(1+tvaRate()/100) : puTTC;
+    const lineHT = tva>0 ? lineTTC/(1+tvaRate()/100) : lineTTC;
+    return `<tr>
+      <td style="padding:8px 10px;border-bottom:1px solid #eee">${esc(prodName(l.productId))}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:right">${l.qty}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:right">${fmt(puHT)}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:right">${fmt(lineHT)}</td></tr>`;
+  }).join("");
+  return `<div style="max-width:720px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#1A1A1A;font-size:13px;padding:10px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #C85E2D;padding-bottom:14px">
+      <div>
+        <div style="font-weight:800;letter-spacing:5px;font-size:26px;color:#0F2A4A">DISTRIVIA</div>
+        <div style="width:60px;height:3px;background:#C85E2D;margin:3px 0"></div>
+        <div style="font-size:9px;letter-spacing:3px;color:#888">DISTRIBUTION GROUP</div>
+        <div style="font-size:11px;color:#555;margin-top:8px;line-height:1.5">Dakar · Sénégal<br>contact@distrivia.sn · +221 77 527 82 24${st.ninea?`<br>NINEA : ${esc(st.ninea)}`:""}${st.rccm?` · RCCM : ${esc(st.rccm)}`:""}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="background:#0F2A4A;color:#fff;padding:10px 18px;border-radius:8px"><div style="font-size:11px;letter-spacing:2px;opacity:.8">FACTURE</div><div style="font-size:18px;font-weight:800">${esc(num)}</div></div>
+        <div style="font-size:12px;color:#555;margin-top:8px">Date : ${frDate(o.date)}</div>
+        <div style="font-size:11px;color:#888">Réf. commande : ${esc(o.num)}</div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin:16px 0">
+      <div style="font-size:12px"><div style="font-size:10px;color:#888;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Facturé à</div>
+        <b style="font-size:14px">${esc(c.name||"Client")}</b>${c.type?`<br>${esc(c.type)}`:""}${fullPhone(c)?`<br>${esc(fullPhone(c))}`:""}${c.zone?`<br>${esc(c.zone)}, Dakar`:""}</div>
+      <div style="font-size:12px;text-align:right"><div style="font-size:10px;color:#888;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Conditions</div>
+        ${o.payMode==="credit"?`Crédit${o.dueDate?` — échéance ${frDate(o.dueDate)}`:""}`:"Comptant"}<br>Livraison : ${o.delivered?"effectuée":"à venir"}</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+      <tr style="background:#0F2A4A;color:#fff"><th style="padding:8px 10px;text-align:left">Désignation</th><th style="padding:8px 10px;text-align:right">Qté</th><th style="padding:8px 10px;text-align:right">P.U. HT</th><th style="padding:8px 10px;text-align:right">Montant HT</th></tr>
+      ${rows}
+    </table>
+    <div style="display:flex;justify-content:flex-end;margin-top:12px">
+      <table style="font-size:13px;min-width:260px">
+        <tr><td style="padding:4px 10px;color:#555">Total HT</td><td style="padding:4px 10px;text-align:right">${fmt(ht)}</td></tr>
+        ${tva>0?`<tr><td style="padding:4px 10px;color:#555">TVA ${tvaRate()} %</td><td style="padding:4px 10px;text-align:right">${fmt(tva)}</td></tr>`:`<tr><td style="padding:4px 10px;color:#888" colspan="2">Non assujetti à la TVA</td></tr>`}
+        <tr style="background:#F5F1E8;font-weight:800;font-size:15px"><td style="padding:8px 10px;color:#0F2A4A">TOTAL ${tva>0?"TTC":""}</td><td style="padding:8px 10px;text-align:right;color:#0F2A4A">${fmt(ttc)}</td></tr>
+        ${paid>0?`<tr><td style="padding:4px 10px;color:#2E6B3E">Déjà payé</td><td style="padding:4px 10px;text-align:right;color:#2E6B3E">${fmt(paid)}</td></tr>`:""}
+        ${due>0?`<tr><td style="padding:4px 10px;color:#C85E2D;font-weight:700">Reste à payer</td><td style="padding:4px 10px;text-align:right;color:#C85E2D;font-weight:700">${fmt(due)}</td></tr>`:`<tr><td style="padding:4px 10px;color:#2E6B3E;font-weight:700" colspan="2">✓ Facture acquittée</td></tr>`}
+      </table>
+    </div>
+    <div style="margin-top:20px;font-size:11px;color:#666;border-top:1px solid #eee;padding-top:10px;line-height:1.6">
+      Arrêtée la présente facture à la somme de <b>${fmt(ttc)}</b>.<br>
+      Règlement par espèces, Wave, Orange Money, virement ou chèque à l'ordre de DISTRIVIA. Merci de votre confiance.
+    </div>
+    <div style="margin-top:24px;display:flex;justify-content:space-between;font-size:11px;color:#888">
+      <div style="border-top:1px solid #ccc;padding-top:6px;width:45%;text-align:center">Signature client</div>
+      <div style="border-top:1px solid #ccc;padding-top:6px;width:45%;text-align:center">Cachet & signature DISTRIVIA</div>
+    </div>
+  </div>`;
+}
+
 function paymentReceiptHTML(o, p){
   const c = S.clients.find(c=>c.id===o.clientId)||{};
   return `<div style="max-width:420px;margin:0 auto;font-family:Arial,sans-serif;color:#1A1A1A;font-size:13px">
@@ -1909,17 +2079,65 @@ function vMarketing(){
   const running = S.campaigns.filter(c=>c.status==="En cours").length;
   // Répartition clients par zone (ciblage)
   const byZone={}; S.clients.forEach(c=>{ const z=c.zone||"Non précisé"; byZone[z]=(byZone[z]||0)+1; });
+  const anns = [...(S.announcements||[])].sort((a,b)=>b.id-a.id);
+  const activeAnns = anns.filter(a=>a.active!==false);
+  const ea = editAnnId ? anns.find(a=>a.id===editAnnId) : null;
   return `
-  <h2>Marketing</h2>
+  <h2>Marketing & Communication</h2>
   <div class="cards">
     <div class="card"><div class="v">${S.campaigns.length}</div><div class="l">Campagnes</div></div>
     <div class="card t"><div class="v">${running}</div><div class="l">En cours</div></div>
     <div class="card"><div class="v">${fmt(totalBudget)}</div><div class="l">Budget total engagé</div></div>
     <div class="card g"><div class="v">${totalConv}</div><div class="l">Conversions (nouveaux clients)</div></div>
-    <div class="card"><div class="v">${totalReached?Math.round(totalConv/totalReached*100):0} %</div><div class="l">Taux de conversion moyen</div></div>
+    <div class="card"><div class="v">${activeAnns.length}</div><div class="l">Annonces en ligne</div></div>
     <div class="card"><div class="v">${totalConv?fmt(Math.round(totalBudget/totalConv)):"—"}</div><div class="l">Coût d'acquisition / client</div></div>
   </div>
-  ${can("marketing")?`<div class="panel"><h3>${ec?"Modifier la campagne":"Nouvelle campagne"}</h3>
+
+  ${can("marketing")?`<div class="panel" style="border-left:4px solid var(--terra)">
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:4px">
+      <h3 style="margin:0">📣 Centre de communication ${FB.ok?'<span class="badge ok" style="font-size:10px">portail connecté</span>':'<span class="badge alert" style="font-size:10px">portail hors-ligne</span>'}</h3>
+    </div>
+    <p class="muted" style="margin-bottom:12px">Publiez des <b>affiches promo</b> et des <b>notes d'information</b> qui s'affichent en temps réel sur le portail de vos clients.</p>
+    <div class="grid2">
+      <div><label>Type</label><select id="an-type">
+        <option value="promo" ${ea&&ea.type==="promo"?"selected":""}>🎉 Promotion / offre</option>
+        <option value="info" ${ea&&ea.type==="info"?"selected":""}>ℹ️ Note d'information</option>
+        <option value="alert" ${ea&&ea.type==="alert"?"selected":""}>⚠️ Alerte / urgent</option>
+        <option value="event" ${ea&&ea.type==="event"?"selected":""}>📅 Événement / fête</option>
+      </select></div>
+      <div><label>Couleur d'accent</label><select id="an-color">
+        ${[["terra","Terracotta"],["bleu","Bleu nuit"],["vert","Vert"],["rouge","Rouge"]].map(([v,l])=>`<option value="${v}" ${ea&&ea.color===v?"selected":""}>${l}</option>`).join("")}
+      </select></div>
+    </div>
+    <label>Titre de l'annonce</label><input id="an-title" value="${ea?esc(ea.title):""}" placeholder="Ex. -15% sur les emballages kraft jusqu'au 30 juin !">
+    <label>Message</label><textarea id="an-body" rows="3" placeholder="Détaillez l'offre, l'information ou l'événement...">${ea?esc(ea.body):""}</textarea>
+    <div class="grid2">
+      <div><label>Bouton d'action (optionnel)</label><input id="an-cta" value="${ea?esc(ea.cta||""):""}" placeholder="Ex. Commander maintenant"></div>
+      <div><label>Date d'expiration (optionnel)</label><input id="an-expire" type="date" value="${ea?ea.expire||"":""}"></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" id="an-save">${ea?"Enregistrer les modifications":"📤 Publier sur le portail"}</button>
+      ${ea?'<button class="btn ghost" id="an-cancel">Annuler</button>':""}
+      <button class="btn ghost" id="an-preview">Aperçu</button>
+    </div>
+    <div id="an-preview-box" style="margin-top:12px"></div>
+  </div>
+
+  <div class="panel"><h3 style="margin-bottom:8px">Annonces publiées (${anns.length})</h3>
+    ${anns.length?`<div class="tablewrap"><table>
+      <tr><th>Type</th><th>Titre</th><th>Publiée</th><th>Expire</th><th>État</th><th></th></tr>
+      ${anns.map(a=>`<tr>
+        <td>${annTypeIcon(a.type)} ${annTypeLabel(a.type)}</td>
+        <td><b>${esc(a.title)}</b></td>
+        <td class="muted">${(a.created||"").slice(0,10)}</td>
+        <td class="muted">${a.expire||"—"}${a.expire&&a.expire<today()?' <span class="badge off">expirée</span>':""}</td>
+        <td>${a.active!==false?'<span class="badge ok">En ligne</span>':'<span class="badge off">Masquée</span>'}</td>
+        <td class="row"><button class="btn sm ghost" data-anedit="${a.id}">Modifier</button><button class="btn sm ghost" data-antoggle="${a.id}">${a.active!==false?"Masquer":"Publier"}</button><button class="del" data-andel="${a.id}">✕</button></td>
+      </tr>`).join("")}
+    </table></div>`:`<p class="empty">Aucune annonce. Publiez votre première promo ou note d'information ci-dessus — elle apparaîtra sur le portail de vos clients.</p>`}
+  </div>`:""}
+
+  ${can("marketing")?`<div class="panel"><h3>${ec?"Modifier la campagne":"Nouvelle campagne (suivi interne)"}</h3>
     <div class="grid2">
       <div><label>Nom de la campagne</label><input id="mk-name" value="${ec?esc(ec.name):""}" placeholder="Ex. Promo Tabaski 2026"></div>
       <div><label>Canal</label><select id="mk-channel">${CHANNELS.map(c=>`<option ${ec&&ec.channel===c?"selected":""}>${c}</option>`).join("")}</select></div>
@@ -1956,6 +2174,23 @@ function vMarketing(){
         <li>Parrainage : un client qui en amène un autre = remise</li>
         <li>Visites terrain dibiteries / restaurants avec échantillons</li>
       </ul></div>
+  </div>`;
+}
+function annTypeIcon(t){ return {promo:"🎉",info:"ℹ️",alert:"⚠️",event:"📅"}[t]||"📣"; }
+function annTypeLabel(t){ return {promo:"Promotion",info:"Information",alert:"Alerte",event:"Événement"}[t]||"Annonce"; }
+function annPreviewHTML(a){
+  const colors={terra:"#C85E2D",bleu:"#0F2A4A",vert:"#2E6B3E",rouge:"#A33B3B"};
+  const col=colors[a.color]||"#C85E2D";
+  return `<div style="border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(15,42,74,.12);max-width:420px">
+    <div style="background:${col};color:#fff;padding:14px 16px">
+      <div style="font-size:11px;letter-spacing:1px;opacity:.85;text-transform:uppercase">${annTypeIcon(a.type)} ${annTypeLabel(a.type)}</div>
+      <div style="font-size:17px;font-weight:800;margin-top:3px">${esc(a.title||"Titre de l'annonce")}</div>
+    </div>
+    <div style="background:#fff;padding:14px 16px">
+      <div style="color:#444;font-size:14px;line-height:1.5">${esc(a.body||"Le message de votre annonce apparaîtra ici.").replace(/\n/g,"<br>")}</div>
+      ${a.cta?`<div style="margin-top:12px"><span style="background:${col};color:#fff;padding:8px 16px;border-radius:8px;font-weight:700;font-size:13px;display:inline-block">${esc(a.cta)}</span></div>`:""}
+      ${a.expire?`<div style="margin-top:8px;font-size:11px;color:#888">Valable jusqu'au ${a.expire}</div>`:""}
+    </div>
   </div>`;
 }
 function drawMarketingCharts(){
@@ -2074,6 +2309,8 @@ function bindApp(){
   document.querySelectorAll("nav button").forEach(b=> b.onclick = ()=>{ tab=b.dataset.tab; searchQ=""; render(); });
   el("logout").onclick = async ()=>{ log("Déconnexion"); await save(); session=null; await saveSession(); render(); };
   const mp = el("myprofile"); if(mp) mp.onclick = openProfile;
+  // Cartes KPI cliquables → navigation directe
+  document.querySelectorAll("[data-gotab]").forEach(c=> c.onclick = ()=>{ const t=c.dataset.gotab; if(can(t)||["dash","orders","clients","products"].includes(t)){ tab=t; searchQ=""; render(); } });
 
   // ===== Commandes web (portail) =====
   document.querySelectorAll("[data-webaccept]").forEach(b=> b.onclick = async ()=>{
@@ -2111,10 +2348,7 @@ function bindApp(){
     if(FB.updateDoc) await FB.updateDoc("portal_appointments", b.dataset.webappt, { status:"confirmed" });
     toast("Rendez-vous confirmé ✓");
   });
-  document.querySelectorAll("[data-webclaim]").forEach(b=> b.onclick = async ()=>{
-    if(FB.updateDoc) await FB.updateDoc("portal_claims", b.dataset.webclaim, { status:"resolved" });
-    toast("Réclamation marquée traitée ✓");
-  });
+  document.querySelectorAll("[data-webreply]").forEach(b=> b.onclick = ()=> openClaimThread(b.dataset.webreply));
   document.querySelectorAll("[data-webquote]").forEach(b=> b.onclick = async ()=>{
     if(FB.updateDoc) await FB.updateDoc("portal_quotes", b.dataset.webquote, { status:"resolved" });
     toast("Cotation marquée vue ✓");
@@ -2475,6 +2709,43 @@ function bindApp(){
   });
   ["xlsx","csv"].forEach(f=>{ const b=el("exp-marketing-"+f); if(b) b.onclick=()=>exportData("marketing",f); });
 
+  // ===== Centre de communication (annonces vers le portail) =====
+  const readAnn = ()=>({ type:el("an-type").value, color:el("an-color").value, title:el("an-title").value.trim(),
+    body:el("an-body").value.trim(), cta:el("an-cta").value.trim(), expire:el("an-expire").value });
+  const anPrev = el("an-preview");
+  if(anPrev) anPrev.onclick = ()=>{ const box=el("an-preview-box"); if(box) box.innerHTML = annPreviewHTML(readAnn()); };
+  const anSave = el("an-save");
+  if(anSave) anSave.onclick = async ()=>{
+    const d = readAnn();
+    if(!d.title) return toast("Le titre de l'annonce est requis");
+    if(editAnnId){
+      const a = S.announcements.find(a=>a.id===editAnnId);
+      Object.assign(a, d); log("Annonce modifiée : "+d.title); editAnnId=null;
+      if(FB.ok && FB.updateDoc) await FB.updateDoc("portal_announcements", String(a.id), {...d, active:a.active!==false});
+      await save(); render(); toast("Annonce mise à jour ✓");
+    } else {
+      const a = { id:nid(), ...d, active:true, created:now(), by:me().name };
+      S.announcements.push(a); log("Annonce publiée : "+d.title);
+      // Publier dans la collection portail (lisible par les clients)
+      if(FB.ok && FB.setDoc) await FB.setDoc("portal_announcements", String(a.id), a);
+      await save(); render(); toast(FB.ok?"📤 Annonce publiée sur le portail ✓":"Annonce enregistrée (portail hors-ligne)");
+    }
+  };
+  const anCancel = el("an-cancel"); if(anCancel) anCancel.onclick = ()=>{ editAnnId=null; render(); };
+  document.querySelectorAll("[data-anedit]").forEach(b=> b.onclick = ()=>{ editAnnId=+b.dataset.anedit; render(); window.scrollTo(0,0); });
+  document.querySelectorAll("[data-antoggle]").forEach(b=> b.onclick = async ()=>{
+    const a=S.announcements.find(a=>a.id===+b.dataset.antoggle); a.active = a.active===false;
+    if(FB.ok && FB.updateDoc) await FB.updateDoc("portal_announcements", String(a.id), {active:a.active});
+    log((a.active?"Annonce publiée":"Annonce masquée")+" : "+a.title); await save(); render();
+  });
+  document.querySelectorAll("[data-andel]").forEach(b=> b.onclick = async ()=>{
+    if(!confirm("Supprimer cette annonce ? Elle disparaîtra du portail.")) return;
+    const id=+b.dataset.andel;
+    S.announcements=S.announcements.filter(a=>a.id!==id);
+    if(FB.ok && FB.deleteDoc) await FB.deleteDoc("portal_announcements", String(id));
+    log("Annonce supprimée"); await save(); render();
+  });
+
   // ===== Ressources humaines =====
   const hrSave = el("hr-save");
   if(hrSave) hrSave.onclick = async ()=>{
@@ -2509,6 +2780,15 @@ function bindApp(){
     log("Paramètres TVA mis à jour");
     await save(); render(); toast("Paramètres TVA enregistrés ✓");
   };
+  const setLoy = el("set-loysave");
+  if(setLoy) setLoy.onclick = async ()=>{
+    S.settings = S.settings || {};
+    S.settings.loyaltyEnabled = el("set-loyen").value==="1";
+    S.settings.loyaltyRate = Math.max(1, +el("set-loyrate").value||1);
+    S.settings.loyaltyPer = Math.max(100, +el("set-loyper").value||1000);
+    log("Paramètres fidélité mis à jour");
+    await save(); render(); toast("Programme de fidélité enregistré ✓");
+  };
   const bkE = el("bk-export");
   if(bkE){
     bkE.onclick = ()=>{
@@ -2539,7 +2819,7 @@ function bindApp(){
     el("bk-reset").onclick = async ()=>{
       if(!confirm("Effacer TOUTES les données (y compris les comptes) ? Irréversible."))return;
       if(!confirm("Vraiment sûr ? Exportez d'abord une sauvegarde."))return;
-      S={version:6, users:[], products:[], clients:[], orders:[], expenses:[], suppliers:[], purchases:[], campaigns:[], employees:[], objectives:{}, settings:{tvaRate:18,tvaEnabled:true,pricesTTC:true,ninea:"",rccm:""}, logs:[], seq:1, orderSeq:1, poSeq:1};
+      S={version:8, users:[], products:[], clients:[], orders:[], expenses:[], suppliers:[], purchases:[], campaigns:[], employees:[], announcements:[], objectives:{}, settings:{tvaRate:18,tvaEnabled:true,pricesTTC:true,ninea:"",rccm:"",loyaltyEnabled:true,loyaltyRate:1,loyaltyPer:1000}, logs:[], seq:1, orderSeq:1, poSeq:1, invoiceSeq:1};
       session=null; await save(); await saveSession(); render();
     };
   }
