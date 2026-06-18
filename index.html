@@ -13,6 +13,7 @@
   }
   *{box-sizing:border-box; margin:0; padding:0;}
   body{font-family:'Segoe UI', system-ui, -apple-system, sans-serif; background:var(--creme); color:var(--anthra); font-size:15px;}
+  .topbar{position:sticky; top:0; z-index:60;}
   header{background:var(--bleu); padding:10px 18px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;}
   .brand{display:flex; flex-direction:column; flex-shrink:0;}
   .wordmark{color:#fff; font-weight:800; letter-spacing:6px; font-size:19px;}
@@ -42,6 +43,13 @@
   .nav-card{cursor:pointer; transition:transform .12s, box-shadow .12s;}
   .nav-card:hover{transform:translateY(-2px); box-shadow:0 6px 18px rgba(15,42,74,.18);}
   .nav-card .l{color:var(--terra);}
+  .chat-layout{display:flex;gap:0;border:1px solid #e5e5e0;border-radius:10px;overflow:hidden;height:64vh;min-height:420px;background:#fff;}
+  .chat-list{width:280px;flex:0 0 280px;border-right:1px solid #e5e5e0;overflow-y:auto;background:#fafaf8;}
+  .chat-main{flex:1;display:flex;flex-direction:column;min-width:0;}
+  .thread-item{padding:11px 14px;border-bottom:1px solid #eee;cursor:pointer;transition:background .12s;}
+  .thread-item:hover{background:#f0ede4;}
+  .thread-item.active{background:#e8eef5;border-left:3px solid var(--terra);}
+  @media(max-width:700px){ .chat-layout{flex-direction:column;height:auto;} .chat-list{width:100%;flex:none;max-height:200px;} .chat-main{height:50vh;} }
   .card .v{font-size:20px; font-weight:800; color:var(--bleu);}
   .card .l{font-size:11.5px; color:var(--gris); margin-top:2px;}
   .card.t .v{color:var(--terra);} .card.g .v{color:var(--vert);} .card.r .v{color:var(--rouge);}
@@ -94,8 +102,8 @@
   .login{max-width:400px; margin:7vh auto; background:#fff; border-radius:12px; padding:26px; box-shadow:0 4px 18px rgba(15,42,74,.15);}
   .login .wordmark{color:var(--bleu); text-align:center; letter-spacing:7px; font-size:24px;}
   .login .bar{margin:6px auto;} .login .sub{color:var(--gris); text-align:center; letter-spacing:3px;}
-  #toast{position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--bleu); color:#fff; padding:11px 18px; border-radius:8px; font-weight:600; display:none; z-index:50; box-shadow:0 4px 14px rgba(0,0,0,.25); max-width:90vw; text-align:center;}
-  .modalbg{position:fixed; inset:0; background:rgba(15,42,74,.55); display:flex; align-items:center; justify-content:center; padding:14px; z-index:60;}
+  #toast{position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--bleu); color:#fff; padding:11px 18px; border-radius:8px; font-weight:600; display:none; z-index:110; box-shadow:0 4px 14px rgba(0,0,0,.25); max-width:90vw; text-align:center;}
+  .modalbg{position:fixed; inset:0; background:rgba(15,42,74,.55); display:flex; align-items:center; justify-content:center; padding:14px; z-index:100;}
   .modal{background:#fff; border-radius:12px; padding:20px; width:100%; max-width:480px; max-height:92vh; overflow:auto; box-shadow:0 10px 40px rgba(0,0,0,.3);}
   .modal h3{margin-top:0;}
   .x{background:none; border:none; font-size:22px; color:var(--gris); cursor:pointer; line-height:1;}
@@ -103,6 +111,7 @@
   @media print{ body *{visibility:hidden;} #printarea, #printarea *{visibility:visible;} #printarea{position:absolute; left:0; top:0; width:100%; padding:10px;} }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 
@@ -211,6 +220,7 @@ window.DISTRIVIA_FB = {
 <body>
 <div id="root"></div>
 <div id="modal"></div>
+<div id="confirm"></div>
 <div id="printarea" style="display:none"></div>
 <div id="toast"></div>
 
@@ -330,7 +340,7 @@ const store = {
 };
 
 /* ================== ÉTAT ================== */
-let S = { version:8, users:[], products:[], clients:[], orders:[], expenses:[], suppliers:[], purchases:[], campaigns:[], employees:[], announcements:[], objectives:{}, settings:{tvaRate:18,tvaEnabled:true,pricesTTC:true,ninea:"",rccm:"",loyaltyEnabled:true,loyaltyRate:1,loyaltyPer:1000}, logs:[], seq:1, orderSeq:1, poSeq:1, invoiceSeq:1 };
+let S = { version:9, users:[], products:[], clients:[], orders:[], expenses:[], suppliers:[], purchases:[], campaigns:[], employees:[], announcements:[], objectives:{}, settings:{tvaRate:18,tvaEnabled:true,pricesTTC:true,ninea:"",rccm:"",loyaltyEnabled:true,loyaltyRate:1,loyaltyPer:1000}, logs:[], seq:1, orderSeq:1, poSeq:1, invoiceSeq:1, clientSeq:1 };
 let session = null;      // {userId}
 let tab = "dash";
 let draft = null;
@@ -351,7 +361,9 @@ let monitorPeriod = { from:"", to:"" };
 // Données venant du PORTAIL clients/fournisseurs (Firestore temps réel)
 let webOrders = [];       // portal_orders
 let webAppointments = []; // portal_appointments
-let webClaims = [];       // portal_claims
+let webClaims = [];       // portal_claims (ancien)
+let webThreads = [];      // portal_threads (conversations WhatsApp)
+let activeThreadId = null;
 let webQuotes = [];       // portal_quotes
 let webLoaded = false;
 const acctFrom = () => acctPeriod.from; const acctTo = () => acctPeriod.to;
@@ -365,6 +377,7 @@ const el = id => document.getElementById(id);
 const esc = s => String(s??"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function toast(msg){ const t = el("toast"); t.textContent = msg; t.style.display = "block"; setTimeout(()=>t.style.display="none", 2400); }
 function nid(){ return S.seq++; }
+function nextMatricule(){ if(S.clientSeq===undefined) S.clientSeq=1; return "CLI-"+String(S.clientSeq++).padStart(4,"0"); }
 
 /* ================== AUTH ================== */
 async function sha256(txt){
@@ -411,22 +424,30 @@ async function loadAll(){
     if (FB.listenCollection){
       FB.listenCollection("portal_orders", rows=>{ webOrders=rows; webLoaded=true; if(tab==="weborders"&&me()) render(); refreshWebBadge(); });
       FB.listenCollection("portal_appointments", rows=>{ webAppointments=rows; if(tab==="weborders"&&me()) render(); refreshWebBadge(); });
-      FB.listenCollection("portal_claims", rows=>{ webClaims=rows; if(tab==="weborders"&&me()) render(); refreshWebBadge(); });
+      FB.listenCollection("portal_threads", rows=>{ webThreads=rows; if((tab==="weborders"||tab==="messages")&&me()) render(); refreshWebBadge(); });
       FB.listenCollection("portal_quotes", rows=>{ webQuotes=rows; if(tab==="weborders"&&me()) render(); refreshWebBadge(); });
     }
   }
 }
-// Met à jour la pastille du menu "Commandes web"
+// Met à jour les pastilles des menus
 function refreshWebBadge(){
   const n = webOrders.filter(o=>o.status==="new").length
           + webAppointments.filter(a=>a.status==="pending").length
-          + webClaims.filter(c=>c.status==="pending").length
           + webQuotes.filter(q=>q.status==="pending").length;
   const btn = document.querySelector('[data-tab="weborders"]');
   if(btn){
     let b = btn.querySelector(".navbadge");
     if(n>0){ if(!b){ b=document.createElement("span"); b.className="navbadge"; btn.appendChild(b); } b.textContent=n; }
     else if(b){ b.remove(); }
+  }
+  // pastille messagerie : conversations avec messages non lus côté admin
+  const unread = webThreads.filter(t=>t.unreadForAdmin).length;
+  const mbtn = document.querySelector('[data-tab="messages"]');
+  if(mbtn){
+    let b = mbtn.querySelector(".navbadge");
+    if(unread>0){ if(!b){ b=document.createElement("span"); b.className="navbadge"; mbtn.appendChild(b); } b.textContent=unread; }
+    else if(b){ b.remove(); }
+
   }
 }
 async function save(){
@@ -510,13 +531,22 @@ function migrate(){
     (S.clients||[]).forEach(c=>{ if(c.points===undefined) c.points = 0; });
     // Messagerie (réclamations enrichies en conversation) : champ replies[]
   }
+  if (!S.version || S.version < 9) {
+    S.version = 9;
+    // Matricule client unique (CLI-XXXX)
+    if(S.clientSeq === undefined) S.clientSeq = 1;
+    (S.clients||[]).slice().sort((a,b)=>a.id-b.id).forEach(c=>{
+      if(!c.matricule){ c.matricule = "CLI-"+String(S.clientSeq++).padStart(4,"0"); }
+    });
+  }
   if (S.orderSeq === undefined) S.orderSeq = (S.orders?.length||0)+1;
   if (S.poSeq === undefined) S.poSeq = (S.purchases?.length||0)+1;
   if (S.invoiceSeq === undefined) S.invoiceSeq = 1;
+  if (S.clientSeq === undefined) S.clientSeq = (S.clients?.length||0)+1;
   if (!S.settings) S.settings = { tvaRate:18, tvaEnabled:true, pricesTTC:true, ninea:"", rccm:"" };
   if (S.settings.loyaltyEnabled === undefined){ S.settings.loyaltyEnabled=true; S.settings.loyaltyRate=1; S.settings.loyaltyPer=1000; }
   if (!S.announcements) S.announcements = [];
-  (S.clients||[]).forEach(c=>{ if(c.points===undefined) c.points=0; });
+  (S.clients||[]).forEach(c=>{ if(c.points===undefined) c.points=0; if(!c.matricule){ c.matricule="CLI-"+String(S.clientSeq++).padStart(4,"0"); } });
 }
 
 /* Téléphone : helpers */
@@ -619,7 +649,9 @@ function chrome(content){
   const tabs = [
     ["dash","Tableau de bord",true],
     ["weborders","Commandes web",can("orders_create")],
+    ["messages","Messages",true],
     ["orders","Commandes",true],
+    ["invoices","Factures",true],
     ["clients","Clients",true],
     ["products","Produits & Stock",true],
     ["suppliers","Fournisseurs",can("suppliers")],
@@ -634,6 +666,7 @@ function chrome(content){
     ["backup","Sauvegarde",isAdmin()],
   ];
   return `
+  <div class="topbar">
   <header>
     <div class="brand"><div class="wordmark">DISTRIVIA</div><div class="bar"></div><div class="sub">DISTRIBUTION GROUP</div></div>
     <div class="hsearch">
@@ -645,6 +678,7 @@ function chrome(content){
     <button class="btn sm ghost" id="logout">Déconnexion</button></div>
   </header>
   <nav>${tabs.filter(t=>t[2]).map(t=>`<button data-tab="${t[0]}" class="${tab===t[0]?"active":""}">${t[1]}</button>`).join("")}</nav>
+  </div>
   <main>${content}</main>`;
 }
 
@@ -718,6 +752,168 @@ function orderTableHead(){
   return `<tr><th>N°</th><th>Date</th><th>Client</th><th class="num">Total</th><th class="num">Reste dû</th><th>Livraison</th><th>Paiement</th><th></th></tr>`;
 }
 
+/* ================== FACTURES ================== */
+let invFilter = "all"; // all | paid | unpaid | partial
+function vInvoices(){
+  // Toutes les commandes ayant une facture générée
+  const invoiced = S.orders.filter(o=>o.invoiceNum && o.status!=="cancelled");
+  const withStatus = invoiced.map(o=>{
+    const paid=orderPaid(o), due=orderDue(o), total=orderTotal(o);
+    const st = due<=0 ? "paid" : (paid>0 ? "partial" : "unpaid");
+    return {o, paid, due, total, st};
+  }).sort((a,b)=> (a.o.invoiceNum<b.o.invoiceNum?1:-1));
+  const filtered = withStatus.filter(x=> invFilter==="all" || x.st===invFilter);
+  const totalFac = withStatus.reduce((a,x)=>a+x.total,0);
+  const totalPaid = withStatus.reduce((a,x)=>a+x.paid,0);
+  const totalDue = withStatus.reduce((a,x)=>a+x.due,0);
+  const nbPaid = withStatus.filter(x=>x.st==="paid").length;
+  const nbUnpaid = withStatus.filter(x=>x.st!=="paid").length;
+  // commandes livrées sans facture (à facturer)
+  const toInvoice = S.orders.filter(o=>!o.invoiceNum && o.status!=="cancelled" && o.delivered);
+  const stLabel={paid:'<span class="badge paid">Payée</span>',partial:'<span class="badge credit">Partielle</span>',unpaid:'<span class="badge pending">Impayée</span>'};
+  return `
+  <h2>Factures</h2>
+  <div class="cards">
+    <div class="card"><div class="v">${withStatus.length}</div><div class="l">Factures émises</div></div>
+    <div class="card g"><div class="v">${nbPaid}</div><div class="l">Payées</div></div>
+    <div class="card t"><div class="v">${nbUnpaid}</div><div class="l">À encaisser</div></div>
+    <div class="card"><div class="v">${fmt(totalFac)}</div><div class="l">Total facturé</div></div>
+    <div class="card g"><div class="v">${fmt(totalPaid)}</div><div class="l">Total encaissé</div></div>
+    <div class="card ${totalDue?'t':''}"><div class="v">${fmt(totalDue)}</div><div class="l">Reste à encaisser</div></div>
+  </div>
+
+  ${toInvoice.length?`<div class="panel" style="border-left:4px solid var(--terra)"><h3>À facturer (${toInvoice.length})</h3>
+    <p class="muted" style="margin-bottom:8px">Commandes livrées sans facture. Générez la facture en un clic.</p>
+    <div class="tablewrap"><table><tr><th>Commande</th><th>Client</th><th>Date</th><th class="num">Montant</th><th></th></tr>
+    ${toInvoice.map(o=>`<tr><td><b>${esc(o.num)}</b></td><td>${esc(clientName(o.clientId))}</td><td>${o.date}</td><td class="num">${fmt(orderTotal(o))}</td><td><button class="btn sm b" data-makeinv="${o.id}">Générer la facture</button></td></tr>`).join("")}
+    </table></div></div>`:""}
+
+  <div class="panel">
+    <div class="row" style="justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+      <div class="row" style="gap:6px">
+        <button class="btn sm ${invFilter==='all'?'b':'ghost'}" data-invf="all">Toutes (${withStatus.length})</button>
+        <button class="btn sm ${invFilter==='paid'?'b':'ghost'}" data-invf="paid">Payées (${nbPaid})</button>
+        <button class="btn sm ${invFilter==='unpaid'?'b':'ghost'}" data-invf="unpaid">Impayées (${withStatus.filter(x=>x.st==='unpaid').length})</button>
+        <button class="btn sm ${invFilter==='partial'?'b':'ghost'}" data-invf="partial">Partielles (${withStatus.filter(x=>x.st==='partial').length})</button>
+      </div>
+      <button class="btn sm ghost" id="exp-invoices-csv">Export CSV</button>
+    </div>
+    <div class="tablewrap"><table>
+      <tr><th>N° Facture</th><th>Commande</th><th>Client</th><th>Date</th><th class="num">Total TTC</th><th class="num">Payé</th><th class="num">Reste</th><th>Statut</th><th></th></tr>
+      ${filtered.length? filtered.map(x=>`<tr style="cursor:pointer">
+        <td><b style="color:var(--bleu)">${esc(x.o.invoiceNum)}</b></td>
+        <td>${esc(x.o.num)}</td>
+        <td>${esc(clientName(x.o.clientId))}</td>
+        <td class="muted">${frDate(x.o.date)}</td>
+        <td class="num">${fmt(x.total)}</td>
+        <td class="num">${fmt(x.paid)}</td>
+        <td class="num">${x.due?'<span style="color:var(--terra)">'+fmt(x.due)+'</span>':'—'}</td>
+        <td>${stLabel[x.st]}</td>
+        <td class="row"><button class="btn sm ghost" data-invview="${x.o.id}">Voir</button>${x.due>0&&can("orders_pay")?`<button class="btn sm b" data-invpay="${x.o.id}">Encaisser</button>`:""}<button class="btn sm ghost" data-invprint="${x.o.id}">Imprimer</button></td>
+      </tr>`).join("") : `<tr><td colspan="9" class="empty">Aucune facture ${invFilter!=="all"?"dans ce filtre":"— générez-en depuis une commande ou ci-dessus"}.</td></tr>`}
+    </table></div>
+  </div>`;
+}
+
+function bindInvoices(){
+  document.querySelectorAll("[data-invf]").forEach(b=> b.onclick = ()=>{ invFilter=b.dataset.invf; render(); });
+  document.querySelectorAll("[data-makeinv]").forEach(b=> b.onclick = async ()=>{ const o=S.orders.find(o=>o.id===+b.dataset.makeinv); if(o){ assignInvoiceNum(o); await save(); render(); toast("Facture "+o.invoiceNum+" générée ✓"); } });
+  document.querySelectorAll("[data-invview]").forEach(b=> b.onclick = ()=> openOrderDetail(+b.dataset.invview));
+  document.querySelectorAll("[data-invpay]").forEach(b=> b.onclick = ()=> payOrderDialog(+b.dataset.invpay));
+  document.querySelectorAll("[data-invprint]").forEach(b=> b.onclick = ()=>{ const o=S.orders.find(o=>o.id===+b.dataset.invprint); if(o) printHTML(invoiceHTML(o)); });
+  const csv=el("exp-invoices-csv"); if(csv) csv.onclick = ()=> exportInvoicesCSV();
+}
+function exportInvoicesCSV(){
+  const rows=[["N° Facture","Commande","Client","Date","Total TTC","Payé","Reste","Statut"]];
+  S.orders.filter(o=>o.invoiceNum && o.status!=="cancelled").forEach(o=>{
+    const due=orderDue(o), paid=orderPaid(o);
+    rows.push([o.invoiceNum,o.num,clientName(o.clientId),o.date,orderTotal(o),paid,due, due<=0?"Payée":(paid>0?"Partielle":"Impayée")]);
+  });
+  const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(";")).join("\n");
+  const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"}); const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download="distrivia-factures-"+today()+".csv"; a.click();
+}
+
+/* ================== MESSAGERIE (chat WhatsApp) ================== */
+function vMessages(){
+  if(!FB.ok) return `<h2>Messages</h2><div class="infobox">La messagerie temps réel nécessite Firebase. Renseignez vos clés pour discuter avec vos clients.</div>`;
+  const threads = [...webThreads].sort((a,b)=>((b.updated||b.created||"")<(a.updated||a.created||"")?-1:1));
+  const active = threads.find(t=>t._id===activeThreadId) || threads[0] || null;
+  const listHTML = threads.length ? threads.map(t=>{
+    const isActive = active && t._id===active._id;
+    const last = t.lastText || (t.messages&&t.messages.length?t.messages[t.messages.length-1].text:"");
+    const who = t.kind==="supplier"?"🏭":"🛒";
+    return `<div class="thread-item ${isActive?'active':''}" data-thread="${esc(t._id)}">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <b>${who} ${esc(t.party_name||"Client")}</b>
+        ${t.unreadForAdmin?'<span class="navbadge" style="margin:0">●</span>':''}
+      </div>
+      <div class="muted" style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.lastFrom==="DISTRIVIA"?"Vous : ":""}${esc(last||"")}</div>
+    </div>`;
+  }).join("") : `<p class="empty" style="padding:20px">Aucune conversation pour l'instant.</p>`;
+
+  let chatHTML;
+  if(!active){
+    chatHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#888">Sélectionnez une conversation</div>`;
+  } else {
+    const msgs = active.messages||[];
+    const bubbles = msgs.length? msgs.map(m=>{
+      const mine = m.from==="DISTRIVIA";
+      return `<div style="display:flex;${mine?"justify-content:flex-end":"justify-content:flex-start"};margin:6px 0">
+        <div style="max-width:72%;background:${mine?"var(--bleu)":"#fff"};color:${mine?"#fff":"#1A1A1A"};padding:9px 13px;border-radius:14px;${mine?"border-bottom-right-radius:4px":"border-bottom-left-radius:4px"};box-shadow:0 1px 3px rgba(15,42,74,.1)">
+          <div style="font-size:14px;line-height:1.45;white-space:pre-wrap">${esc(m.text)}</div>
+          <div style="font-size:10px;opacity:.6;text-align:right;margin-top:3px">${chatTime(m.date)}</div></div></div>`;
+    }).join("") : `<div style="text-align:center;color:#888;padding:30px">Pas encore de message.</div>`;
+    chatHTML = `
+      <div style="background:var(--bleu);color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;border-radius:8px 8px 0 0">
+        <div style="width:36px;height:36px;border-radius:50%;background:var(--terra);display:flex;align-items:center;justify-content:center;font-weight:800">${esc((active.party_name||"?").charAt(0).toUpperCase())}</div>
+        <div><div style="font-weight:700">${esc(active.party_name||"Client")}</div><div style="font-size:11px;opacity:.8">${esc(active.party_email||"")} ${active.kind==="supplier"?"· Fournisseur":"· Client"}</div></div>
+      </div>
+      <div id="adm-chat-scroll" style="background:var(--creme);padding:14px;flex:1;overflow-y:auto">${bubbles}</div>
+      <div style="display:flex;gap:8px;padding:10px;border-top:1px solid #eee;background:#fff;border-radius:0 0 8px 8px">
+        <textarea id="adm-chat-input" rows="1" placeholder="Votre réponse…" style="flex:1;resize:none;border:1px solid #ddd;border-radius:20px;padding:10px 16px;font-family:inherit;font-size:14px"></textarea>
+        <button class="btn b" id="adm-chat-send" style="border-radius:20px">Envoyer</button>
+      </div>`;
+  }
+  return `<h2>Messages <span class="muted" style="font-size:14px">— discussions clients & fournisseurs</span></h2>
+  <div class="chat-layout">
+    <div class="chat-list">${listHTML}</div>
+    <div class="chat-main" ${active?`data-active="${esc(active._id)}"`:""}>${chatHTML}</div>
+  </div>`;
+}
+function chatTime(iso){ if(!iso) return ""; const d=new Date(iso); if(isNaN(d)) return (iso||"").slice(0,16).replace("T"," ");
+  const t=new Date(); const sd=d.toDateString()===t.toDateString();
+  const hh=String(d.getHours()).padStart(2,"0"), mm=String(d.getMinutes()).padStart(2,"0");
+  return sd?`${hh}:${mm}`:`${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")} ${hh}:${mm}`; }
+async function bindMessages(){
+  // thread actuellement affiché (depuis l'attribut data-active si pas de sélection explicite)
+  const mainEl = document.querySelector(".chat-main");
+  const shownId = (mainEl && mainEl.dataset.active) ? mainEl.dataset.active : activeThreadId;
+  if(!activeThreadId && shownId) activeThreadId = shownId;
+  document.querySelectorAll("[data-thread]").forEach(it=> it.onclick = async ()=>{
+    activeThreadId = it.dataset.thread;
+    const t = webThreads.find(x=>x._id===activeThreadId);
+    if(t && t.unreadForAdmin){ t.unreadForAdmin=false; if(FB.updateDoc) await FB.updateDoc("portal_threads", t._id, {unreadForAdmin:false}); }
+    render();
+  });
+  const sc=el("adm-chat-scroll"); if(sc) sc.scrollTop=sc.scrollHeight;
+  const send=el("adm-chat-send"), input=el("adm-chat-input");
+  const doSend = async ()=>{
+    const tid = activeThreadId || shownId;
+    const t = webThreads.find(x=>x._id===tid); if(!t){ toast("Sélectionnez une conversation"); return; }
+    const txt=(input.value||"").trim(); if(!txt) return; input.value="";
+    const msg={ from:"DISTRIVIA", text:txt, date:new Date().toISOString(), by:me().name };
+    t.messages=[...(t.messages||[]), msg]; t.lastFrom="DISTRIVIA"; t.lastText=txt; t.updated=new Date().toISOString(); t.unreadForAdmin=false;
+    const s=el("adm-chat-scroll"); if(s){ s.innerHTML += `<div style="display:flex;justify-content:flex-end;margin:6px 0"><div style="max-width:72%;background:var(--bleu);color:#fff;padding:9px 13px;border-radius:14px;border-bottom-right-radius:4px"><div style="font-size:14px;white-space:pre-wrap">${esc(txt)}</div><div style="font-size:10px;opacity:.6;text-align:right;margin-top:3px">${chatTime(msg.date)}</div></div></div>`; s.scrollTop=s.scrollHeight; }
+    log("Message envoyé à "+(t.party_name||"client"));
+    const {_id, ...clean} = t;
+    if(FB.setDoc) await FB.setDoc("portal_threads", t._id, clean);
+    else if(FB.updateDoc) await FB.updateDoc("portal_threads", t._id, { messages:t.messages, lastFrom:"DISTRIVIA", lastText:txt, updated:t.updated, unreadForAdmin:false });
+  };
+  if(send) send.onclick = doSend;
+  if(input) input.onkeydown = e=>{ if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); doSend(); } };
+}
+
 /* ================== COMMANDES WEB (portail) ================== */
 function webBadge(s){ return {new:"pending",confirmed:"delivered",delivered:"paid",cancelled:"off",pending:"pending",resolved:"paid"}[s]||"pending"; }
 function webStatusLabel(s){ return {new:"Nouvelle",confirmed:"Confirmée",delivered:"Livrée",cancelled:"Annulée",pending:"En attente",resolved:"Traitée"}[s]||s; }
@@ -735,7 +931,7 @@ function vWebOrders(){
   <div class="cards">
     <div class="card ${pendingOrders.length?'t':''}"><div class="v">${pendingOrders.length}</div><div class="l">Commandes à traiter</div></div>
     <div class="card"><div class="v">${pendingAppts.length}</div><div class="l">Rendez-vous demandés</div></div>
-    <div class="card"><div class="v">${pendingClaims.length}</div><div class="l">Réclamations ouvertes</div></div>
+    <div class="card"><div class="v">${webThreads.filter(t=>t.unreadForAdmin).length}</div><div class="l">Messages non lus</div></div>
     <div class="card"><div class="v">${pendingQuotes.length}</div><div class="l">Cotations fournisseurs</div></div>
   </div>
 
@@ -760,16 +956,9 @@ function vWebOrders(){
       <td>${a.status==="pending"?`<button class="btn sm b" data-webappt="${esc(a._id)}">Confirmer</button>`:`<span class="badge paid">OK</span>`}</td></tr>`).join("")}
     </table></div>`:`<p class="empty">Aucun rendez-vous.</p>`}
     </div>
-    <div class="panel"><h3>💬 Messages & réclamations clients (${webClaims.length})</h3>
-    ${webClaims.length?`<div class="tablewrap"><table><tr><th>Client</th><th>Objet</th><th>État</th><th></th></tr>
-      ${[...webClaims].sort((a,b)=>(a.created<b.created?1:-1)).map(c=>{
-        const nrep=(c.replies||[]).length;
-        return `<tr><td>${esc(c.author_name||"")}<div class="muted">${esc((c.message||"").slice(0,45))}${(c.message||"").length>45?"…":""}</div></td>
-        <td class="muted">${esc(c.type||"")}${c.ref?`<br>${esc(c.ref)}`:""}${nrep?`<br><span style="color:var(--vert)">${nrep} réponse(s)</span>`:""}</td>
-        <td>${c.status==="resolved"?'<span class="badge paid">Traitée</span>':'<span class="badge pending">Ouverte</span>'}</td>
-        <td><button class="btn sm b" data-webreply="${esc(c._id)}">💬 Répondre</button></td></tr>`;
-      }).join("")}
-    </table></div>`:`<p class="empty">Aucun message.</p>`}
+    <div class="panel"><h3>💬 Messagerie</h3>
+      <p class="muted">Les conversations clients et fournisseurs sont maintenant dans l'onglet <b>Messages</b> (chat en temps réel).</p>
+      <button class="btn b" data-gotab="messages" style="margin-top:8px">Ouvrir la messagerie ${webThreads.filter(t=>t.unreadForAdmin).length?`(${webThreads.filter(t=>t.unreadForAdmin).length} non lus)`:""}</button>
     </div>
   </div>
 
@@ -896,15 +1085,15 @@ function vClients(){
     <div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">Base clientèle (${S.clients.length})</h3>
       <div class="row"><button class="btn sm b" id="exp-clients-xlsx">Excel</button><button class="btn sm ghost" id="exp-clients-csv">CSV</button><button class="btn sm ghost" id="exp-clients-pdf">PDF</button></div></div>
     <div class="tablewrap"><table>
-    <tr><th>Client</th><th>Type</th><th>Zone</th><th>Téléphone</th><th class="num">CA total</th><th class="num">Crédit en cours</th>${ce?"<th></th>":""}</tr>
+    <tr><th>Matricule</th><th>Client</th><th>Type</th><th>Zone</th><th>Téléphone</th><th class="num">CA total</th><th class="num">Crédit en cours</th>${ce?"<th></th>":""}</tr>
     ${S.clients.length? S.clients.map(c=>{
       const co = S.orders.filter(o=>o.clientId===c.id && o.status!=="cancelled");
       const ca = co.filter(o=>o.status!=="pending").reduce((a,o)=>a+orderTotal(o),0);
       const cr = co.filter(o=>o.status==="delivered").reduce((a,o)=>a+orderDue(o),0);
-      return `<tr><td><b><a href="#" data-cdetail="${c.id}" style="color:var(--bleu);text-decoration:underline;cursor:pointer">${esc(c.name)}</a></b></td><td class="muted">${esc(c.type)}</td><td>${esc(c.zone)}</td><td>${esc(fullPhone(c))}</td>
+      return `<tr><td class="muted"><b style="color:var(--bleu)">${esc(c.matricule||"—")}</b></td><td><b><a href="#" data-cdetail="${c.id}" style="color:var(--bleu);text-decoration:underline;cursor:pointer">${esc(c.name)}</a></b></td><td class="muted">${esc(c.type)}</td><td>${esc(c.zone)}</td><td>${esc(fullPhone(c))}</td>
       <td class="num">${fmt(ca)}</td><td class="num">${cr?'<span class="badge credit">'+fmt(cr)+'</span>':'—'}</td>
       ${ce?`<td class="row"><button class="btn sm ghost" data-cdetail="${c.id}">Détails</button>${(can("clients_edit")||cm)?`<button class="btn sm ghost" data-cedit="${c.id}">Modifier</button>`:""}${cm?`<button class="del" data-delc="${c.id}" title="Supprimer">✕</button>`:""}</td>`:""}</tr>`;
-    }).join("") : `<tr><td colspan="7" class="empty">Aucun client.</td></tr>`}
+    }).join("") : `<tr><td colspan="8" class="empty">Aucun client.</td></tr>`}
   </table></div></div>`;
 }
 
@@ -1106,6 +1295,63 @@ function openModal(html){ modalContent = html; el("modal").innerHTML = `<div cla
 function closeModal(){ modalContent=null; el("modal").innerHTML=""; }
 window.closeModal = closeModal;
 
+/* ===== Confirmation réutilisable (2e couche au-dessus des modales) ===== */
+let _confirmCb = null;
+function confirmAction(opts, cb){
+  // opts: {title, message, okLabel, danger}
+  _confirmCb = cb;
+  const o = typeof opts==="string" ? {message:opts} : opts;
+  const danger = o.danger;
+  el("confirm").innerHTML = `<div class="modalbg" id="confirmbg" style="z-index:120"><div class="modal" style="max-width:400px">
+    <h3 style="color:${danger?'var(--rouge)':'var(--bleu)'};margin-bottom:8px">${esc(o.title||"Confirmer l'action")}</h3>
+    <p style="color:var(--anthra);line-height:1.5;margin-bottom:18px">${o.message||"Voulez-vous continuer ?"}</p>
+    <div class="row" style="justify-content:flex-end;gap:8px">
+      <button class="btn ghost" id="cf-no">Annuler</button>
+      <button class="btn ${danger?'':'b'}" id="cf-yes" ${danger?'style="background:var(--rouge)"':''}>${esc(o.okLabel||"Confirmer")}</button>
+    </div></div></div>`;
+  el("cf-no").onclick = ()=>{ el("confirm").innerHTML=""; _confirmCb=null; };
+  el("cf-yes").onclick = ()=>{ el("confirm").innerHTML=""; const cb=_confirmCb; _confirmCb=null; if(cb) cb(); };
+  el("confirmbg").onclick = e=>{ if(e.target.id==="confirmbg"){ el("confirm").innerHTML=""; _confirmCb=null; } };
+}
+
+/* ===== Dialogue d'encaissement (paiement partiel + moyen) ===== */
+function payOrderDialog(id){
+  if(!can("orders_pay")) return toast("Droit insuffisant");
+  const o=S.orders.find(o=>o.id===id); if(!o) return;
+  const due = orderDue(o);
+  if(due<=0) return toast("Cette commande est déjà soldée");
+  el("confirm").innerHTML = `<div class="modalbg" id="paybg" style="z-index:120"><div class="modal" style="max-width:420px">
+    <h3 style="color:var(--bleu);margin-bottom:4px">Encaisser un paiement</h3>
+    <p class="muted" style="margin-bottom:14px">${esc(o.num)} · ${esc(clientName(o.clientId))} · reste dû <b style="color:var(--terra)">${fmt(due)}</b></p>
+    <label>Montant encaissé</label>
+    <input id="pay-amt" type="number" min="1" max="${due}" value="${due}" style="width:100%">
+    <div class="row" style="gap:6px;margin:8px 0">
+      <button class="btn sm ghost" id="pay-full">Solde total (${fmt(due)})</button>
+      <button class="btn sm ghost" id="pay-half">Moitié</button>
+    </div>
+    <label>Moyen de paiement</label>
+    <select id="pay-method" style="width:100%">${PAY_METHODS.map(m=>`<option>${m}</option>`).join("")}</select>
+    <div class="row" style="justify-content:flex-end;gap:8px;margin-top:18px">
+      <button class="btn ghost" id="pay-cancel">Annuler</button>
+      <button class="btn b" id="pay-ok">Valider l'encaissement</button>
+    </div></div></div>`;
+  const close=()=>{ el("confirm").innerHTML=""; };
+  el("pay-cancel").onclick=close;
+  el("paybg").onclick=e=>{ if(e.target.id==="paybg") close(); };
+  el("pay-full").onclick=()=>{ el("pay-amt").value=due; };
+  el("pay-half").onclick=()=>{ el("pay-amt").value=Math.round(due/2); };
+  el("pay-ok").onclick=async ()=>{
+    let amount = Math.min(due, Math.max(0, Math.round(+el("pay-amt").value||0)));
+    if(!amount) return toast("Montant invalide");
+    const method = el("pay-method").value;
+    o.payments.push({id:nid(), date:today(), amount, method, by:me().name});
+    refreshStatus(o);
+    log("Versement encaissé : "+o.num+" — "+fmt(amount)+" ("+method+")"+(orderDue(o)>0?" — reste "+fmt(orderDue(o)):" — soldée"));
+    close(); await save(); render(); toast("Versement de "+fmt(amount)+" enregistré ✓");
+  };
+}
+window.payOrderDialog = payOrderDialog;
+
 /* ================== ACTIONS COMMANDES (réutilisables) ================== */
 async function deliverOrder(id){
   if(!can("orders_deliver")) return toast("Droit insuffisant");
@@ -1190,8 +1436,10 @@ function openOrderDetail(id){
     </div>`);
   // handlers internes de la modale
   const q=sel=>el("modal").querySelector(sel);
-  if(q("[data-md-deliver]")) q("[data-md-deliver]").onclick=()=>{ closeModal(); deliverOrder(o.id); };
-  if(q("[data-md-pay]")) q("[data-md-pay]").onclick=()=>{ closeModal(); quickPay(o.id); };
+  if(q("[data-md-deliver]")) q("[data-md-deliver]").onclick=()=>{
+    confirmAction({title:"Confirmer la livraison", message:`Marquer la commande <b>${esc(o.num)}</b> comme livrée à <b>${esc(clientName(o.clientId))}</b> ?<br><br>Le stock sera décrémenté${o.payMode==="comptant"?" et le paiement comptant enregistré":""}.`, okLabel:"Oui, livrer"}, ()=>{ closeModal(); deliverOrder(o.id); });
+  };
+  if(q("[data-md-pay]")) q("[data-md-pay]").onclick=()=>{ closeModal(); payOrderDialog(o.id); };
   if(q("[data-md-edit]")) q("[data-md-edit]").onclick=()=>{ closeModal(); startEditOrder(o.id); };
   if(q("[data-md-receipt]")) q("[data-md-receipt]").onclick=()=>{ printHTML(orderReceiptHTML(o)); };
   if(q("[data-md-invoice]")) q("[data-md-invoice]").onclick=async ()=>{ assignInvoiceNum(o); await save(); printHTML(invoiceHTML(o)); };
@@ -1208,7 +1456,7 @@ function openClientDetail(id){
   const overdue = co.filter(o=>o.payMode==="credit"&&o.dueDate&&orderDue(o)>0&&o.dueDate<today());
   const rows = co.length? co.map(o=>`<tr style="cursor:pointer" data-md-order="${o.id}"><td><b>${esc(o.num)}</b></td><td>${o.date}</td><td class="num">${fmt(orderTotal(o))}</td><td class="num">${orderDue(o)?'<span style="color:var(--terra)">'+fmt(orderDue(o))+'</span>':"—"}</td><td>${deliveryLabel(o)} ${payLabel(o)}</td></tr>`).join("") : `<tr><td colspan="5" class="empty">Aucune commande.</td></tr>`;
   openModal(`<div class="row" style="justify-content:space-between"><h3>${esc(c.name)}</h3><button class="x" onclick="closeModal()">×</button></div>
-    <p class="muted">${esc(c.type)} · ${esc(c.zone||"—")} · ${esc(fullPhone(c)||"—")}</p>
+    <p class="muted">${c.matricule?`<b style="color:var(--bleu)">${esc(c.matricule)}</b> · `:""}${esc(c.type)} · ${esc(c.zone||"—")} · ${esc(fullPhone(c)||"—")}</p>
     <div class="cards" style="margin:10px 0">
       <div class="card"><div class="v" style="font-size:16px">${fmt(caTotal)}</div><div class="l">CA total (livré)</div></div>
       <div class="card t"><div class="v" style="font-size:16px">${fmt(credit)}</div><div class="l">Crédit en cours</div></div>
@@ -1367,6 +1615,19 @@ function printHTML(inner){
   window.print();
   setTimeout(()=>{ pa.style.display="none"; pa.innerHTML=""; }, 400);
 }
+// Génère un QR code (image data-URL) à partir d'un texte. Vide si la lib n'est pas chargée.
+function qrDataURL(text, cell){
+  try{
+    if(typeof qrcode==="undefined") return "";
+    const qr = qrcode(0, "M"); qr.addData(text); qr.make();
+    return qr.createDataURL(cell||4, 8);
+  }catch(e){ console.warn("QR:", e); return ""; }
+}
+// Lien public vers la commande (page de suivi du portail)
+function orderTrackURL(o){
+  const base = (S.settings && S.settings.portalUrl) ? S.settings.portalUrl.replace(/\/$/,"") : "https://ablayembow.github.io/DISTRIVIA-Gestion/portail.html";
+  return base + "?cmd=" + encodeURIComponent(o.num);
+}
 function orderReceiptHTML(o){
   const c = S.clients.find(c=>c.id===o.clientId)||{};
   const rows = o.lines.map(l=>`<tr><td style="padding:4px 6px;border-bottom:1px solid #eee">${esc(prodName(l.productId))}</td>
@@ -1378,7 +1639,8 @@ function orderReceiptHTML(o){
     ${receiptHeader()}
     <div style="display:flex;justify-content:space-between"><b>Bon de commande</b><b style="color:#0F2A4A">${esc(o.num)}</b></div>
     <div style="font-size:12px;color:#555;margin:6px 0">Date : ${o.date} · Paiement : ${o.payMode==="credit"?"Crédit":"Comptant"} · Statut : ${o.status==="cancelled"?"ANNULÉE":o.status}</div>
-    <div style="font-size:12px;margin-bottom:8px"><b>Client :</b> ${esc(c.name||"")}${c.phone?" · "+esc(c.phone):""}${c.zone?" · "+esc(c.zone):""}</div>
+    <div style="font-size:12px;margin-bottom:8px"><b>Client :</b> ${esc(c.name||"")}${c.matricule?" ("+esc(c.matricule)+")":""}${c.phone?" · "+esc(c.phone):""}${c.zone?" · "+esc(c.zone):""}</div>
+    ${qrDataURL(orderTrackURL(o))?`<div style="text-align:center;margin:6px 0"><img src="${qrDataURL(orderTrackURL(o),3)}" width="78" height="78" alt="QR"><div style="font-size:9px;color:#888">Scannez pour suivre votre commande</div></div>`:""}
     <table style="width:100%;border-collapse:collapse;font-size:12px"><tr style="background:#0F2A4A;color:#fff">
       <th style="padding:5px 6px;text-align:left">Produit</th><th style="padding:5px 6px;text-align:right">Qté</th><th style="padding:5px 6px;text-align:right">P.U.</th><th style="padding:5px 6px;text-align:right">Total</th></tr>
       ${rows}</table>
@@ -1422,11 +1684,12 @@ function invoiceHTML(o){
         <div style="background:#0F2A4A;color:#fff;padding:10px 18px;border-radius:8px"><div style="font-size:11px;letter-spacing:2px;opacity:.8">FACTURE</div><div style="font-size:18px;font-weight:800">${esc(num)}</div></div>
         <div style="font-size:12px;color:#555;margin-top:8px">Date : ${frDate(o.date)}</div>
         <div style="font-size:11px;color:#888">Réf. commande : ${esc(o.num)}</div>
+        ${qrDataURL(orderTrackURL(o))?`<div style="margin-top:8px;text-align:right"><img src="${qrDataURL(orderTrackURL(o))}" width="92" height="92" alt="QR commande" style="border:1px solid #eee;border-radius:6px"><div style="font-size:9px;color:#888;margin-top:2px">Scannez pour suivre la commande</div></div>`:""}
       </div>
     </div>
     <div style="display:flex;justify-content:space-between;margin:16px 0">
       <div style="font-size:12px"><div style="font-size:10px;color:#888;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Facturé à</div>
-        <b style="font-size:14px">${esc(c.name||"Client")}</b>${c.type?`<br>${esc(c.type)}`:""}${fullPhone(c)?`<br>${esc(fullPhone(c))}`:""}${c.zone?`<br>${esc(c.zone)}, Dakar`:""}</div>
+        <b style="font-size:14px">${esc(c.name||"Client")}</b>${c.matricule?` <span style="color:#0F2A4A;font-weight:700">(${esc(c.matricule)})</span>`:""}${c.type?`<br>${esc(c.type)}`:""}${fullPhone(c)?`<br>${esc(fullPhone(c))}`:""}${c.zone?`<br>${esc(c.zone)}, Dakar`:""}</div>
       <div style="font-size:12px;text-align:right"><div style="font-size:10px;color:#888;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Conditions</div>
         ${o.payMode==="credit"?`Crédit${o.dueDate?` — échéance ${frDate(o.dueDate)}`:""}`:"Comptant"}<br>Livraison : ${o.delivered?"effectuée":"à venir"}</div>
     </div>
@@ -2260,7 +2523,7 @@ function render(){
   const root = el("root");
   if (!S.users.length) { root.innerHTML = vSetup(); bindSetup(); return; }
   if (!session || !me()) { root.innerHTML = vLogin(); bindLogin(); return; }
-  const views = {dash:vDash, weborders:vWebOrders, orders:vOrders, clients:vClients, products:vProducts, suppliers:vSuppliers, logistics:vLogistics, cash:vCash, accounting:vAccounting, control:vControl, marketing:vMarketing, hr:vHR, monitoring:vMonitoring, users:vUsers, backup:vBackup};
+  const views = {dash:vDash, weborders:vWebOrders, messages:vMessages, orders:vOrders, invoices:vInvoices, clients:vClients, products:vProducts, suppliers:vSuppliers, logistics:vLogistics, cash:vCash, accounting:vAccounting, control:vControl, marketing:vMarketing, hr:vHR, monitoring:vMonitoring, users:vUsers, backup:vBackup};
   const guard = {weborders:"orders_create", cash:"cash_view", suppliers:"suppliers", accounting:"accounting", control:"control", logistics:"logistics", marketing:"marketing", hr:"hr", monitoring:"monitoring"};
   if (guard[tab] && !can(guard[tab])) tab="dash";
   if ((tab==="users"||tab==="backup") && !isAdmin()) tab = "dash";
@@ -2271,6 +2534,8 @@ function render(){
   if (tab==="marketing") setTimeout(drawMarketingCharts, 30);
   if (tab==="hr") setTimeout(drawHRCharts, 30);
   if (tab==="monitoring") setTimeout(drawMonitoringCharts, 30);
+  if (tab==="messages") setTimeout(bindMessages, 20);
+  if (tab==="invoices") setTimeout(bindInvoices, 20);
   setTimeout(refreshWebBadge, 20);
 }
 
@@ -2319,7 +2584,7 @@ function bindApp(){
     // 1) trouver ou créer le client (par email ou nom)
     let cli = S.clients.find(c=> (wo.client_email && c.email && c.email.toLowerCase()===String(wo.client_email).toLowerCase()) || c.name===wo.client_name );
     if(!cli){
-      cli = { id:nid(), name:wo.client_name||"Client web", type:"Boutique / revendeur", zone:wo.zone||"", dial:"+221", local:"", phone:"", email:(wo.client_email||""), created:today() };
+      cli = { id:nid(), matricule:nextMatricule(), name:wo.client_name||"Client web", type:"Boutique / revendeur", zone:wo.zone||"", dial:"+221", local:"", phone:"", email:(wo.client_email||""), points:0, created:today() };
       S.clients.push(cli);
     }
     // 2) créer la commande (prix repris du catalogue produits si trouvé, sinon 0 à compléter)
@@ -2348,7 +2613,6 @@ function bindApp(){
     if(FB.updateDoc) await FB.updateDoc("portal_appointments", b.dataset.webappt, { status:"confirmed" });
     toast("Rendez-vous confirmé ✓");
   });
-  document.querySelectorAll("[data-webreply]").forEach(b=> b.onclick = ()=> openClaimThread(b.dataset.webreply));
   document.querySelectorAll("[data-webquote]").forEach(b=> b.onclick = async ()=>{
     if(FB.updateDoc) await FB.updateDoc("portal_quotes", b.dataset.webquote, { status:"resolved" });
     toast("Cotation marquée vue ✓");
@@ -2411,7 +2675,7 @@ function bindApp(){
       log("Client modifié : "+name); editClientId=null;
       await save(); render(); toast("Client mis à jour ✓");
     } else {
-      S.clients.push({ id:nid(), name, type:el("c-type").value, zone:el("c-zone").value.trim(), dial, local, phone:dial+" "+local, created:today() });
+      S.clients.push({ id:nid(), matricule:nextMatricule(), name, type:el("c-type").value, zone:el("c-zone").value.trim(), dial, local, phone:dial+" "+local, points:0, created:today() });
       log("Client créé : "+name);
       await save(); render(); toast("Client ajouté ✓");
     }
@@ -2421,11 +2685,12 @@ function bindApp(){
   document.querySelectorAll("[data-delc]").forEach(b=> b.onclick = async ()=>{
     const id=+b.dataset.delc;
     if(S.orders.some(o=>o.clientId===id)) return toast("Client avec commandes — suppression bloquée");
-    if(!confirm("Supprimer ce client ?")) return;
     const c=S.clients.find(c=>c.id===id);
-    S.clients = S.clients.filter(c=>c.id!==id);
-    log("Client supprimé : "+(c?c.name:id));
-    await save(); render();
+    confirmAction({title:"Supprimer le client", message:`Supprimer définitivement <b>${esc(c?c.name:"")}</b> ? Cette action est irréversible.`, okLabel:"Supprimer", danger:true}, async ()=>{
+      S.clients = S.clients.filter(c=>c.id!==id);
+      log("Client supprimé : "+(c?c.name:id));
+      await save(); render(); toast("Client supprimé");
+    });
   });
 
   // Commande — brouillon
@@ -2503,9 +2768,12 @@ function bindApp(){
   document.querySelectorAll("[data-cdetail]").forEach(b=> b.onclick = ()=> openClientDetail(+b.dataset.cdetail));
   document.querySelectorAll("[data-sdetail]").forEach(b=> b.onclick = ()=> openSupplierDetail(+b.dataset.sdetail));
 
-  // Livrer / Encaisser (délèguent aux fonctions réutilisables)
-  document.querySelectorAll("[data-deliver]").forEach(b=> b.onclick = ()=> deliverOrder(+b.dataset.deliver));
-  document.querySelectorAll("[data-quickpay]").forEach(b=> b.onclick = ()=> quickPay(+b.dataset.quickpay));
+  // Livrer / Encaisser (délèguent aux fonctions réutilisables, avec confirmation)
+  document.querySelectorAll("[data-deliver]").forEach(b=> b.onclick = ()=>{
+    const o=S.orders.find(o=>o.id===+b.dataset.deliver); if(!o) return;
+    confirmAction({title:"Confirmer la livraison", message:`Marquer <b>${esc(o.num)}</b> comme livrée à <b>${esc(clientName(o.clientId))}</b> ?<br><br>Le stock sera décrémenté${o.payMode==="comptant"?" et le paiement comptant enregistré":""}.`, okLabel:"Oui, livrer"}, ()=> deliverOrder(o.id));
+  });
+  document.querySelectorAll("[data-quickpay]").forEach(b=> b.onclick = ()=> payOrderDialog(+b.dataset.quickpay));
 
   // Versement depuis la Caisse
   const vAdd = el("v-add");
@@ -2819,7 +3087,7 @@ function bindApp(){
     el("bk-reset").onclick = async ()=>{
       if(!confirm("Effacer TOUTES les données (y compris les comptes) ? Irréversible."))return;
       if(!confirm("Vraiment sûr ? Exportez d'abord une sauvegarde."))return;
-      S={version:8, users:[], products:[], clients:[], orders:[], expenses:[], suppliers:[], purchases:[], campaigns:[], employees:[], announcements:[], objectives:{}, settings:{tvaRate:18,tvaEnabled:true,pricesTTC:true,ninea:"",rccm:"",loyaltyEnabled:true,loyaltyRate:1,loyaltyPer:1000}, logs:[], seq:1, orderSeq:1, poSeq:1, invoiceSeq:1};
+      S={version:9, users:[], products:[], clients:[], orders:[], expenses:[], suppliers:[], purchases:[], campaigns:[], employees:[], announcements:[], objectives:{}, settings:{tvaRate:18,tvaEnabled:true,pricesTTC:true,ninea:"",rccm:"",loyaltyEnabled:true,loyaltyRate:1,loyaltyPer:1000}, logs:[], seq:1, orderSeq:1, poSeq:1, invoiceSeq:1, clientSeq:1};
       session=null; await save(); await saveSession(); render();
     };
   }
