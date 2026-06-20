@@ -363,6 +363,7 @@ let webOrders = [];       // portal_orders
 let webAppointments = []; // portal_appointments
 let webClaims = [];       // portal_claims (ancien)
 let webThreads = [];      // portal_threads (conversations WhatsApp)
+let webSignups = [];      // portal_clients (inscriptions portail = prospects)
 let activeThreadId = null;
 let webQuotes = [];       // portal_quotes
 let webLoaded = false;
@@ -455,6 +456,7 @@ async function loadAll(){
     // Écoute des données du portail clients/fournisseurs
     if (FB.listenCollection){
       FB.listenCollection("portal_orders", rows=>{ webOrders=rows; webLoaded=true; if(tab==="weborders"&&me()) render(); refreshWebBadge(); });
+      FB.listenCollection("portal_clients", rows=>{ webSignups=rows; if((tab==="weborders"||tab==="clients")&&me()) render(); refreshWebBadge(); });
       FB.listenCollection("portal_appointments", rows=>{ webAppointments=rows; if(tab==="weborders"&&me()) render(); refreshWebBadge(); });
       FB.listenCollection("portal_threads", rows=>{ webThreads=rows; if((tab==="weborders"||tab==="messages")&&me()) render(); refreshWebBadge(); });
       FB.listenCollection("portal_quotes", rows=>{ webQuotes=rows; if(tab==="weborders"&&me()) render(); refreshWebBadge(); });
@@ -769,7 +771,7 @@ function orderRow(o){
   let act = "";
   if (o.status!=="cancelled") {
     if (!o.delivered && can("orders_deliver")) act += `<button class="btn sm b" data-deliver="${o.id}">Livrer</button> `;
-    if (due>0 && can("orders_pay")) act += `<button class="btn sm" data-quickpay="${o.id}">Encaisser</button> `;
+    if (o.delivered && !o.invoiceNum && can("orders_pay")) act += `<button class="btn sm" data-makeinv-row="${o.id}">📄 Facturer</button> `;
     if (can("orders_edit")) act += `<button class="btn sm ghost" data-oedit="${o.id}">Modifier</button> `;
     act += `<button class="btn sm ghost" data-oreceipt="${o.id}">Reçu</button> `;
     if (can("orders_cancel")) act += `<button class="btn sm" style="background:var(--rouge)" data-ocancel="${o.id}">Annuler</button>`;
@@ -787,6 +789,8 @@ function orderTableHead(){
 
 /* ================== FACTURES ================== */
 let invFilter = "all"; // all | paid | unpaid | partial
+let invSearch = "";
+let invFrom = "", invTo = "";
 function vInvoices(){
   // Toutes les commandes ayant une facture générée
   const invoiced = S.orders.filter(o=>o.invoiceNum && o.status!=="cancelled");
@@ -795,7 +799,14 @@ function vInvoices(){
     const st = due<=0 ? "paid" : (paid>0 ? "partial" : "unpaid");
     return {o, paid, due, total, st};
   }).sort((a,b)=> (a.o.invoiceNum<b.o.invoiceNum?1:-1));
-  const filtered = withStatus.filter(x=> invFilter==="all" || x.st===invFilter);
+  const q = invSearch.trim().toLowerCase();
+  const filtered = withStatus.filter(x=>{
+    if(invFilter!=="all" && x.st!==invFilter) return false;
+    if(invFrom && x.o.date<invFrom) return false;
+    if(invTo && x.o.date>invTo) return false;
+    if(q){ const hay=(x.o.invoiceNum+" "+x.o.num+" "+clientName(x.o.clientId)).toLowerCase(); if(!hay.includes(q)) return false; }
+    return true;
+  });
   const totalFac = withStatus.reduce((a,x)=>a+x.total,0);
   const totalPaid = withStatus.reduce((a,x)=>a+x.paid,0);
   const totalDue = withStatus.reduce((a,x)=>a+x.due,0);
@@ -823,13 +834,19 @@ function vInvoices(){
 
   <div class="panel">
     <div class="row" style="justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
-      <div class="row" style="gap:6px">
+      <div class="row" style="gap:6px;flex-wrap:wrap">
         <button class="btn sm ${invFilter==='all'?'b':'ghost'}" data-invf="all">Toutes (${withStatus.length})</button>
         <button class="btn sm ${invFilter==='paid'?'b':'ghost'}" data-invf="paid">Payées (${nbPaid})</button>
         <button class="btn sm ${invFilter==='unpaid'?'b':'ghost'}" data-invf="unpaid">Impayées (${withStatus.filter(x=>x.st==='unpaid').length})</button>
         <button class="btn sm ${invFilter==='partial'?'b':'ghost'}" data-invf="partial">Partielles (${withStatus.filter(x=>x.st==='partial').length})</button>
       </div>
       <button class="btn sm ghost" id="exp-invoices-csv">Export CSV</button>
+    </div>
+    <div class="row" style="gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:end">
+      <div style="flex:1;min-width:180px"><label style="font-size:11px;color:var(--gris)">Recherche (n° facture, commande, client)</label><input id="inv-search" value="${esc(invSearch)}" placeholder="🔍 Ex. FAC-2026-0003 ou Teranga"></div>
+      <div><label style="font-size:11px;color:var(--gris)">Du</label><input type="date" id="inv-from" value="${invFrom}"></div>
+      <div><label style="font-size:11px;color:var(--gris)">Au</label><input type="date" id="inv-to" value="${invTo}"></div>
+      ${(invSearch||invFrom||invTo)?`<button class="btn sm ghost" id="inv-clear">Réinitialiser</button>`:""}
     </div>
     <div class="tablewrap"><table>
       <tr><th>N° Facture</th><th>Commande</th><th>Client</th><th>Date</th><th class="num">Total TTC</th><th class="num">Payé</th><th class="num">Reste</th><th>Statut</th><th></th></tr>
@@ -842,8 +859,8 @@ function vInvoices(){
         <td class="num">${fmt(x.paid)}</td>
         <td class="num">${x.due?'<span style="color:var(--terra)">'+fmt(x.due)+'</span>':'—'}</td>
         <td>${stLabel[x.st]}</td>
-        <td class="row"><button class="btn sm ghost" data-invview="${x.o.id}">Voir</button>${x.due>0&&can("orders_pay")?`<button class="btn sm b" data-invpay="${x.o.id}">Encaisser</button>`:""}<button class="btn sm ghost" data-invprint="${x.o.id}">Imprimer</button></td>
-      </tr>`).join("") : `<tr><td colspan="9" class="empty">Aucune facture ${invFilter!=="all"?"dans ce filtre":"— générez-en depuis une commande ou ci-dessus"}.</td></tr>`}
+        <td class="row"><button class="btn sm ghost" data-invview="${x.o.id}">Voir</button><button class="btn sm ghost" data-invprint="${x.o.id}">Imprimer</button></td>
+      </tr>`).join("") : `<tr><td colspan="9" class="empty">Aucune facture ${(invFilter!=="all"||invSearch||invFrom||invTo)?"pour ces critères":"— générez-en depuis une commande ou ci-dessus"}.</td></tr>`}
     </table></div>
   </div>`;
 }
@@ -852,9 +869,13 @@ function bindInvoices(){
   document.querySelectorAll("[data-invf]").forEach(b=> b.onclick = ()=>{ invFilter=b.dataset.invf; render(); });
   document.querySelectorAll("[data-makeinv]").forEach(b=> b.onclick = async ()=>{ const o=S.orders.find(o=>o.id===+b.dataset.makeinv); if(o){ assignInvoiceNum(o); await save(); render(); toast("Facture "+o.invoiceNum+" générée ✓"); } });
   document.querySelectorAll("[data-invview]").forEach(b=> b.onclick = ()=> openOrderDetail(+b.dataset.invview));
-  document.querySelectorAll("[data-invpay]").forEach(b=> b.onclick = ()=> payOrderDialog(+b.dataset.invpay));
   document.querySelectorAll("[data-invprint]").forEach(b=> b.onclick = ()=>{ const o=S.orders.find(o=>o.id===+b.dataset.invprint); if(o) printHTML(invoiceHTML(o)); });
   const csv=el("exp-invoices-csv"); if(csv) csv.onclick = ()=> exportInvoicesCSV();
+  // Filtres : recherche + dates
+  const se=el("inv-search"); if(se) se.oninput=()=>{ invSearch=se.value; const pos=se.selectionStart; render(); const ns=el("inv-search"); if(ns){ ns.focus(); try{ns.setSelectionRange(pos,pos);}catch(e){} } };
+  const fr=el("inv-from"); if(fr) fr.onchange=()=>{ invFrom=fr.value; render(); };
+  const to=el("inv-to"); if(to) to.onchange=()=>{ invTo=to.value; render(); };
+  const cl=el("inv-clear"); if(cl) cl.onclick=()=>{ invSearch=""; invFrom=""; invTo=""; render(); };
 }
 function exportInvoicesCSV(){
   const rows=[["N° Facture","Commande","Client","Date","Total TTC","Payé","Reste","Statut"]];
@@ -970,12 +991,13 @@ function vWebOrders(){
 
   <div class="panel"><h3>🛒 Commandes clients (${webOrders.length})</h3>
   ${webOrders.length?`<div class="tablewrap"><table>
-    <tr><th>Réf</th><th>Date</th><th>Client</th><th>Articles</th><th>Livraison</th><th>Statut</th><th></th></tr>
+    <tr><th>Réf</th><th>Date</th><th>Client</th><th>Contact</th><th>Articles</th><th>Livraison</th><th>Statut</th><th></th></tr>
     ${[...webOrders].sort((a,b)=>(a.created<b.created?1:-1)).map(o=>`<tr>
       <td><b>${esc(o.ref)}</b></td><td>${(o.created||"").slice(0,10)}</td>
       <td>${esc(o.client_name||"")}<div class="muted">${esc(o.client_email||"")}</div></td>
-      <td class="muted">${(o.items||[]).map(i=>i.qty+"× "+esc(i.name)).join(", ")}${o.note?`<div class="muted">📝 ${esc(o.note)}</div>`:""}</td>
-      <td class="muted">${o.delivery==="pickup"?"Retrait":"Livraison"}${o.zone?"<br>"+esc(o.zone):""}</td>
+      <td class="muted">${o.client_phone?`📞 ${esc(o.client_phone)}`:'<span style="color:#bbb">—</span>'}</td>
+      <td class="muted">${(o.items||[]).map(i=>i.qty+"× "+esc(i.name)).join(", ")}${o.note?`<div style="margin-top:6px;background:#FFF3E0;border-left:3px solid var(--terra);padding:6px 9px;border-radius:4px;color:#7a3d12;font-weight:600">📝 Note client : ${esc(o.note)}</div>`:""}</td>
+      <td class="muted">${o.delivery==="pickup"?"Retrait":"Livraison"}${o.zone?"<br>📍 "+esc(o.zone):""}</td>
       <td><span class="badge ${webBadge(o.status)}">${webStatusLabel(o.status)}</span></td>
       <td class="row">${o.status==="new"?`<button class="btn sm b" data-webaccept="${esc(o._id)}">Accepter</button><button class="btn sm" style="background:var(--rouge)" data-webreject="${esc(o._id)}">Refuser</button>`:`<span class="muted">${o.localNum?("→ "+esc(o.localNum)):"traitée"}</span>`}</td>
     </tr>`).join("")}
@@ -1133,7 +1155,21 @@ function vClients(){
       <td class="num">${fmt(ca)}</td><td class="num">${cr?'<span class="badge credit">'+fmt(cr)+'</span>':'—'}</td>
       ${ce?`<td class="row"><button class="btn sm ghost" data-cdetail="${c.id}">Détails</button>${(can("clients_edit")||cm)?`<button class="btn sm ghost" data-cedit="${c.id}">Modifier</button>`:""}${cm?`<button class="del" data-delc="${c.id}" title="Supprimer">✕</button>`:""}</td>`:""}</tr>`;
     }).join("") : `<tr><td colspan="8" class="empty">Aucun client.</td></tr>`}
-  </table></div></div>`;
+  </table></div></div>
+  ${(function(){
+    // Prospects : inscrits sur le portail pas encore dans la base (ni par email ni par nom)
+    const known = new Set(); S.clients.forEach(c=>{ if(c.email) known.add(c.email.toLowerCase()); known.add((c.name||"").toLowerCase()); });
+    const prospects = (webSignups||[]).filter(s=> s.email && !known.has((s.email||"").toLowerCase()) && !known.has((s.name||"").toLowerCase()));
+    if(!FB.ok) return "";
+    return `<div class="panel" style="border-left:4px solid var(--terra)">
+      <h3 style="margin-bottom:4px">🌱 Clients potentiels — inscrits sur le portail (${prospects.length})</h3>
+      <p class="muted" style="margin-bottom:10px">Ces personnes ont créé un compte sur le portail mais n'ont pas encore commandé. Ajoutez-les à votre base pour les relancer.</p>
+      ${prospects.length?`<div class="tablewrap"><table><tr><th>Nom</th><th>Type</th><th>Zone</th><th>Téléphone</th><th>Email</th><th>Inscrit le</th>${cm?"<th></th>":""}</tr>
+        ${prospects.map(s=>`<tr><td><b>${esc(s.name||"")}</b></td><td class="muted">${esc(s.type||"—")}</td><td>${esc(s.zone||"—")}</td><td>${esc(s.phone||"—")}</td><td class="muted">${esc(s.email||"")}</td><td class="muted">${(s.created||"").slice(0,10)}</td>
+        ${cm?`<td><button class="btn sm b" data-prospect='${esc(JSON.stringify({name:s.name||"",type:s.type||"",zone:s.zone||"",phone:s.phone||"",email:s.email||""}))}'>+ Ajouter</button></td>`:""}</tr>`).join("")}
+      </table></div>`:`<p class="empty">Aucun prospect pour l'instant.</p>`}
+    </div>`;
+  })()}`;
 }
 
 function vOrders(){
@@ -1159,12 +1195,16 @@ function vOrders(){
       </div>
       <h3>Lignes</h3>
       <div class="lines">
-        ${draft.lines.map((l,i)=>`<div class="ln">
+        ${draft.lines.map((l,i)=>{
+          const prod = S.products.find(p=>p.id==l.productId);
+          const over = prod && l.qty>prod.stock;
+          return `<div class="ln">
           <select data-lprod="${i}">${S.products.map(p=>`<option value="${p.id}" ${p.id==l.productId?"selected":""}>${esc(p.name)} (stock ${p.stock})</option>`).join("")}</select>
-          <input type="number" min="1" value="${l.qty}" data-lqty="${i}">
+          <input type="number" min="1" value="${l.qty}" data-lqty="${i}" style="${over?'border:2px solid var(--rouge);background:#fce8e8':''}">
           <input type="number" min="0" value="${l.price}" data-lprice="${i}">
           <button class="del" data-lrm="${i}">✕</button>
-        </div>`).join("")}
+          ${over?`<div style="grid-column:1/-1;color:var(--rouge);font-size:12px;font-weight:600">⛔ Stock insuffisant : ${prod.stock} disponible(s) seulement</div>`:""}
+        </div>`;}).join("")}
       </div>
       <div class="row"><button class="btn ghost" id="o-addline">+ Ajouter une ligne</button></div>
       <div class="total">Total : ${fmt(total)}</div>
@@ -1184,7 +1224,8 @@ function vOrders(){
 }
 
 function vCash(){
-  const payable = S.orders.filter(o=>o.status!=="cancelled" && orderDue(o)>0).sort((a,b)=>b.id-a.id);
+  const payable = S.orders.filter(o=>o.status!=="cancelled" && o.invoiceNum && orderDue(o)>0).sort((a,b)=>b.id-a.id);
+  const notInvoiced = S.orders.filter(o=>o.status!=="cancelled" && !o.invoiceNum && o.delivered && orderDue(o)>0).length;
   const cf = cashPeriod.from, ct = cashPeriod.to;
   const inR = d => (!cf || d>=cf) && (!ct || d<=ct);
   const moves = [];
@@ -1205,15 +1246,16 @@ function vCash(){
     ${Object.entries(byMethod).map(([m,v])=>`<div class="card"><div class="v" style="font-size:16px">${fmt(v)}</div><div class="l">${esc(m)}</div></div>`).join("")}
   </div>
   ${can("orders_pay")?`<div class="panel"><h3>Encaisser un versement</h3>
+    ${notInvoiced>0?`<div class="infobox" style="margin-bottom:10px">📄 ${notInvoiced} commande(s) livrée(s) ne sont pas encore facturées. <b>Générez la facture</b> (onglet Commandes ou Factures) avant de pouvoir encaisser.</div>`:""}
     ${payable.length?`<div class="grid2">
-      <div><label>Commande concernée</label><select id="v-order">${payable.map(o=>`<option value="${o.id}">${esc(o.num)} — ${esc(clientName(o.clientId))} (reste ${fmt(orderDue(o))})</option>`).join("")}</select></div>
-      <div><label>Montant du versement (FCFA)</label><input id="v-amount" type="number" min="1" value="${orderDue(payable[0])}"></div>
+      <div><label>Facture concernée</label><select id="v-order" onchange="(function(){var o=window.__payById&&window.__payById(this.value);})()">${payable.map(o=>`<option value="${o.id}" data-due="${orderDue(o)}">${esc(o.invoiceNum)} · ${esc(o.num)} — ${esc(clientName(o.clientId))} (reste ${fmt(orderDue(o))})</option>`).join("")}</select></div>
+      <div><label>Montant du versement (FCFA)</label><input id="v-amount" type="number" min="1" max="${orderDue(payable[0])}" value="${orderDue(payable[0])}"></div>
       <div><label>Moyen de paiement</label><select id="v-method">${PAY_METHODS.map(m=>`<option>${m}</option>`).join("")}</select></div>
       <div><label>Date</label><input id="v-date" type="date" value="${today()}"></div>
     </div>
     <div class="row" style="margin-top:10px"><button class="btn" id="v-add">Enregistrer le versement</button>
-    <span class="muted">Versement partiel accepté (acompte) — le reste dû se met à jour.</span></div>`
-    :`<p class="empty">Aucune commande avec un reste à payer.</p>`}
+    <span class="muted">Versement partiel accepté (acompte) — le reste dû se met à jour. Impossible d'encaisser plus que le reste dû.</span></div>`
+    :`<p class="empty">Aucune facture avec un reste à payer.</p>`}
   </div>`:""}
   ${can("cash_expense")?`<div class="panel"><h3>Enregistrer une dépense</h3>
     <div class="grid2">
@@ -1395,8 +1437,10 @@ window.payOrderDialog = payOrderDialog;
 async function deliverOrder(id){
   if(!can("orders_deliver")) return toast("Droit insuffisant");
   const o=S.orders.find(o=>o.id===id); if(!o) return;
+  if(o.delivered) return toast("Commande déjà livrée");
+  // Point 6 : on ne peut pas livrer plus que le stock disponible
   for(const l of o.lines){ const p=S.products.find(p=>p.id===l.productId);
-    if(p && p.stock<l.qty && !confirm("Stock insuffisant sur "+p.name+" ("+p.stock+" dispo, "+l.qty+" demandés). Livrer quand même ?")) return; }
+    if(p && p.stock<l.qty){ return toast("⛔ Stock insuffisant : "+p.name+" ("+p.stock+" en stock, "+l.qty+" demandés). Réapprovisionnez d'abord."); } }
   o.lines.forEach(l=>{ const p=S.products.find(p=>p.id===l.productId); if(p) p.stock=Math.max(0,p.stock-l.qty); });
   o.delivered=true; o.deliveredDate=today(); o.deliveredBy=me().name;
   refreshStatus(o);
@@ -1407,12 +1451,9 @@ async function deliverOrder(id){
     const pts = Math.floor(orderTotal(o)/per)*rate;
     if(pts>0){ const c=S.clients.find(c=>c.id===o.clientId); if(c){ c.points=(c.points||0)+pts; o.pointsAwarded=pts; log("Fidélité : +"+pts+" pts à "+c.name); } }
   }
-  if(o.payMode==="comptant" && can("orders_pay")){
-    o.payments.push({id:nid(), date:today(), amount:orderDue(o), method:"Espèces", by:me().name});
-    log("Versement encaissé : "+o.num+" (comptant, soldée)");
-    refreshStatus(o); toast("Livrée et encaissée ✓");
-  } else { toast("Livrée — en attente d'encaissement"); }
+  // Point 5+7 : PLUS de paiement automatique. Le paiement se fait à la Caisse, sur facture.
   await save(); render();
+  toast("Commande livrée ✓ — générez la facture puis encaissez à la Caisse");
 }
 async function quickPay(id){
   if(!can("orders_pay")) return toast("Droit insuffisant");
@@ -1467,21 +1508,20 @@ function openOrderDetail(id){
     <div class="tablewrap"><table><tr><th>Date</th><th>Moyen</th><th>Par</th><th class="num">Montant</th></tr>${pays}</table></div>
     <div class="row" style="margin-top:14px;flex-wrap:wrap">
       ${!o.delivered&&o.status!=="cancelled"&&can("orders_deliver")?`<button class="btn b" data-md-deliver="${o.id}">Livrer</button>`:""}
-      ${due>0&&o.status!=="cancelled"&&can("orders_pay")?`<button class="btn" data-md-pay="${o.id}">Encaisser</button>`:""}
       ${o.status!=="cancelled"&&can("orders_edit")?`<button class="btn ghost" data-md-edit="${o.id}">Modifier</button>`:""}
       <button class="btn ghost" data-md-receipt="${o.id}">Reçu / imprimer</button>
       <button class="btn b" data-md-invoice="${o.id}">📄 Facture</button>
+      ${due>0&&o.invoiceNum?`<span class="muted" style="align-self:center;font-size:13px">💰 Encaissement à la Caisse</span>`:""}
       <button class="btn ghost" onclick="closeModal()">Fermer</button>
     </div>`);
   // handlers internes de la modale
   const q=sel=>el("modal").querySelector(sel);
   if(q("[data-md-deliver]")) q("[data-md-deliver]").onclick=()=>{
-    confirmAction({title:"Confirmer la livraison", message:`Marquer la commande <b>${esc(o.num)}</b> comme livrée à <b>${esc(clientName(o.clientId))}</b> ?<br><br>Le stock sera décrémenté${o.payMode==="comptant"?" et le paiement comptant enregistré":""}.`, okLabel:"Oui, livrer"}, ()=>{ closeModal(); deliverOrder(o.id); });
+    confirmAction({title:"Confirmer la livraison", message:`Marquer la commande <b>${esc(o.num)}</b> comme livrée à <b>${esc(clientName(o.clientId))}</b> ?<br><br>Le stock sera décrémenté. Le paiement se fera ensuite à la Caisse.`, okLabel:"Oui, livrer"}, ()=>{ closeModal(); deliverOrder(o.id); });
   };
-  if(q("[data-md-pay]")) q("[data-md-pay]").onclick=()=>{ closeModal(); payOrderDialog(o.id); };
   if(q("[data-md-edit]")) q("[data-md-edit]").onclick=()=>{ closeModal(); startEditOrder(o.id); };
   if(q("[data-md-receipt]")) q("[data-md-receipt]").onclick=()=>{ printHTML(orderReceiptHTML(o)); };
-  if(q("[data-md-invoice]")) q("[data-md-invoice]").onclick=async ()=>{ assignInvoiceNum(o); await save(); printHTML(invoiceHTML(o)); };
+  if(q("[data-md-invoice]")) q("[data-md-invoice]").onclick=async ()=>{ assignInvoiceNum(o); await save(); closeModal(); render(); toast("Facture "+o.invoiceNum+" générée ✓ — encaissement à la Caisse"); printHTML(invoiceHTML(o)); };
 }
 
 function openClientDetail(id){
@@ -1988,7 +2028,7 @@ function vSuppliers(){
 function vLogistics(){
   const toDeliver = S.orders.filter(o=>o.status!=="cancelled" && !o.delivered);
   const byZone = {};
-  toDeliver.forEach(o=>{ const c=S.clients.find(c=>c.id===o.clientId); const z=(c&&c.zone)||"Non précisé"; (byZone[z]=byZone[z]||[]).push(o); });
+  toDeliver.forEach(o=>{ const c=S.clients.find(c=>c.id===o.clientId); const z=o.deliveryAddr||(c&&c.zone)||"Non précisé"; (byZone[z]=byZone[z]||[]).push(o); });
   const stockAlerts = S.products.filter(p=>p.stock<=p.alert);
   const inTransit = S.purchases.filter(p=>p.status==="En transit"||p.status==="Commandé"||p.status==="Payé acompte");
   return `
@@ -2002,9 +2042,11 @@ function vLogistics(){
   <div class="panel"><h3>Tournées de livraison par zone</h3>
     ${Object.keys(byZone).length?Object.entries(byZone).map(([z,os])=>`<div style="margin-bottom:12px">
       <div style="font-weight:700;color:var(--bleu);margin-bottom:4px">📍 ${esc(z)} — ${os.length} livraison(s)</div>
-      <div class="tablewrap"><table><tr><th>N°</th><th>Client</th><th>Téléphone</th><th class="num">Total</th><th>Paiement prévu</th><th></th></tr>
+      <div class="tablewrap"><table><tr><th>N°</th><th>Client</th><th>Téléphone</th><th>Adresse / livraison</th><th class="num">Total</th><th>Paiement prévu</th><th></th></tr>
       ${os.map(o=>{const c=S.clients.find(c=>c.id===o.clientId)||{};
-        return `<tr><td><b>${esc(o.num)}</b></td><td>${esc(clientName(o.clientId))}</td><td>${esc(c.phone||"—")}</td>
+        const tel = o.deliveryPhone || c.phone || "—";
+        const adr = o.deliveryMode==="pickup" ? "Retrait entrepôt" : (o.deliveryAddr || c.zone || "—");
+        return `<tr><td><b>${esc(o.num)}</b>${o.webRef?`<div class="muted" style="font-size:11px">${esc(o.webRef)}</div>`:""}</td><td>${esc(clientName(o.clientId))}</td><td>${esc(tel)}</td><td class="muted">${esc(adr)}</td>
         <td class="num">${fmt(orderTotal(o))}</td><td>${o.payMode==="credit"?"Crédit"+(o.dueDate?" (éch. "+o.dueDate+")":""):"Comptant"}</td>
         <td>${can("orders_deliver")?`<button class="btn sm b" data-deliver="${o.id}">Marquer livrée</button>`:""}</td></tr>`;}).join("")}
       </table></div></div>`).join("")
@@ -2649,9 +2691,14 @@ function bindApp(){
     if(!confirm("Accepter la commande "+wo.ref+" de "+(wo.client_name||"")+" ?\n\nUn client et une commande seront créés dans DISTRIVIA Gestion.")) return;
     // 1) trouver ou créer le client (par email ou nom)
     let cli = S.clients.find(c=> (wo.client_email && c.email && c.email.toLowerCase()===String(wo.client_email).toLowerCase()) || c.name===wo.client_name );
+    const woPhoneLocal = (wo.client_phone||"").replace(/^\+?221/,"").replace(/[^\d]/g,"");
     if(!cli){
-      cli = { id:nid(), matricule:nextMatricule(), name:wo.client_name||"Client web", type:"Boutique / revendeur", zone:wo.zone||"", dial:"+221", local:"", phone:"", email:(wo.client_email||""), points:0, created:today() };
+      cli = { id:nid(), matricule:nextMatricule(), name:wo.client_name||"Client web", type:"Boutique / revendeur", zone:wo.zone||"", dial:"+221", local:woPhoneLocal, phone:(wo.client_phone||""), email:(wo.client_email||""), points:0, created:today(), source:"portail" };
       S.clients.push(cli);
+    } else {
+      // compléter le téléphone si absent
+      if(!cli.local && woPhoneLocal){ cli.local=woPhoneLocal; cli.phone=wo.client_phone||cli.phone; }
+      if(cli.prospect){ cli.prospect=false; } // devient client actif
     }
     // 2) créer la commande (prix repris du catalogue produits si trouvé, sinon 0 à compléter)
     const lines = (wo.items||[]).map(it=>{
@@ -2661,7 +2708,7 @@ function bindApp(){
     const num = "CMD-" + String(S.orderSeq++).padStart(4,"0");
     S.orders.push({ id:nid(), num, date:today(), clientId:cli.id, payMode:"comptant", dueDate:null,
       lines, status:"pending", delivered:false, payments:[], createdBy:(me().name+" (web)"),
-      webRef:wo.ref, note:wo.note||"" });
+      webRef:wo.ref, note:wo.note||"", deliveryMode:(wo.delivery||"delivery"), deliveryAddr:(wo.zone||""), deliveryPhone:(wo.client_phone||cli.phone||"") });
     log("Commande web acceptée : "+wo.ref+" → "+num);
     await save();
     // 3) marquer la commande web comme confirmée
@@ -2765,6 +2812,14 @@ function bindApp(){
     }
   };
   const cCancel = el("c-cancel"); if(cCancel) cCancel.onclick = ()=>{ editClientId=null; render(); };
+  document.querySelectorAll("[data-prospect]").forEach(b=> b.onclick = async ()=>{
+    let p; try{ p=JSON.parse(b.dataset.prospect); }catch(e){ return; }
+    const local = (p.phone||"").replace(/^\+?221/,"").replace(/[^\d]/g,"");
+    if(local && phoneExists("+221", local, null)) return toast("⚠ Ce téléphone existe déjà dans la base");
+    S.clients.push({ id:nid(), matricule:nextMatricule(), name:p.name||"Client", type:p.type||"Boutique / revendeur", zone:p.zone||"", dial:"+221", local, phone:p.phone||"", email:p.email||"", points:0, created:today(), source:"portail" });
+    log("Prospect ajouté à la base : "+(p.name||""));
+    await save(); render(); toast("Client ajouté à la base ✓");
+  });
   document.querySelectorAll("[data-cedit]").forEach(b=> b.onclick = ()=>{ editClientId=+b.dataset.cedit; tab="clients"; render(); });
   document.querySelectorAll("[data-delc]").forEach(b=> b.onclick = async ()=>{
     const id=+b.dataset.delc;
@@ -2794,6 +2849,12 @@ function bindApp(){
     document.querySelectorAll("[data-lrm]").forEach(b=> b.onclick = ()=>{ draft.lines.splice(+b.dataset.lrm,1); render(); });
     el("o-save").onclick = async ()=>{
       if(!draft.lines.length) return;
+      // Point 6 : empêcher de commander plus que le stock (sauf édition d'une commande déjà livrée)
+      const editingDelivered = editOrder && editOrder.delivered;
+      if(!editingDelivered){
+        for(const l of draft.lines){ const p=S.products.find(p=>p.id===l.productId);
+          if(p && l.qty>p.stock){ return toast("⛔ "+p.name+" : seulement "+p.stock+" en stock. Réduisez la quantité ou réapprovisionnez."); } }
+      }
       // Validation échéance crédit (max 3 mois)
       let dueDate = null;
       if(draft.payMode==="credit"){
@@ -2855,25 +2916,36 @@ function bindApp(){
   // Livrer / Encaisser (délèguent aux fonctions réutilisables, avec confirmation)
   document.querySelectorAll("[data-deliver]").forEach(b=> b.onclick = ()=>{
     const o=S.orders.find(o=>o.id===+b.dataset.deliver); if(!o) return;
-    confirmAction({title:"Confirmer la livraison", message:`Marquer <b>${esc(o.num)}</b> comme livrée à <b>${esc(clientName(o.clientId))}</b> ?<br><br>Le stock sera décrémenté${o.payMode==="comptant"?" et le paiement comptant enregistré":""}.`, okLabel:"Oui, livrer"}, ()=> deliverOrder(o.id));
+    confirmAction({title:"Confirmer la livraison", message:`Marquer <b>${esc(o.num)}</b> comme livrée à <b>${esc(clientName(o.clientId))}</b> ?<br><br>Le stock sera décrémenté. Le paiement se fera ensuite à la Caisse.`, okLabel:"Oui, livrer"}, ()=> deliverOrder(o.id));
   });
-  document.querySelectorAll("[data-quickpay]").forEach(b=> b.onclick = ()=> payOrderDialog(+b.dataset.quickpay));
+  document.querySelectorAll("[data-makeinv-row]").forEach(b=> b.onclick = async ()=>{
+    const o=S.orders.find(o=>o.id===+b.dataset.makeinvRow); if(!o) return;
+    assignInvoiceNum(o); await save(); render(); toast("Facture "+o.invoiceNum+" générée ✓ — encaissez à la Caisse");
+  });
 
-  // Versement depuis la Caisse
+  // Versement depuis la Caisse (point 7 : uniquement sur factures ; point 6 : plafonné ; point 5 : confirmation)
   const vAdd = el("v-add");
   if(vAdd) vAdd.onclick = async ()=>{
     const o = S.orders.find(o=>o.id===+el("v-order").value);
     if(!o) return;
+    if(!o.invoiceNum) return toast("Cette commande doit d'abord être facturée");
     const due = orderDue(o);
-    const amount = Math.max(0, +el("v-amount").value||0);
+    let amount = Math.max(0, Math.round(+el("v-amount").value||0));
     if(!amount) return toast("Montant invalide");
-    if(amount>due && !confirm("Le montant dépasse le reste dû ("+fmt(due)+"). Limiter au reste dû ?")) return;
-    const final = Math.min(amount, due);
-    o.payments.push({id:nid(), date:el("v-date").value||today(), amount:final, method:(el("v-method")?el("v-method").value:"Espèces"), by:me().name});
-    refreshStatus(o);
-    log("Versement encaissé : "+o.num+" — "+fmt(final)+(orderDue(o)>0?" (reste "+fmt(orderDue(o))+")":" (soldée)"));
-    await save(); render(); toast("Versement de "+fmt(final)+" enregistré ✓");
+    // Point 6 : on ne facture/encaisse jamais plus que le reste dû
+    if(amount>due){ amount=due; toast("Montant limité au reste dû ("+fmt(due)+")"); }
+    const method = el("v-method")?el("v-method").value:"Espèces";
+    const date = el("v-date").value||today();
+    confirmAction({title:"Confirmer l'encaissement", message:`Encaisser <b>${fmt(amount)}</b> sur la facture <b>${esc(o.invoiceNum)}</b> (${esc(clientName(o.clientId))}) par <b>${esc(method)}</b> ?${amount>=due?"<br><br>✓ La facture sera soldée.":"<br><br>Reste après : "+fmt(due-amount)}`, okLabel:"Oui, encaisser"}, async ()=>{
+      o.payments.push({id:nid(), date, amount, method, by:me().name});
+      refreshStatus(o);
+      log("Versement encaissé : "+o.invoiceNum+" — "+fmt(amount)+(orderDue(o)>0?" (reste "+fmt(orderDue(o))+")":" (soldée)"));
+      await save(); render(); toast("Versement de "+fmt(amount)+" enregistré ✓");
+    });
   };
+  // synchroniser le max du montant quand on change de facture
+  const vOrder = el("v-order");
+  if(vOrder) vOrder.onchange = ()=>{ const o=S.orders.find(o=>o.id===+vOrder.value); if(o){ const d=orderDue(o); const amt=el("v-amount"); if(amt){ amt.max=d; amt.value=d; } } };
 
   // Dépenses
   const eAdd = el("e-add");
