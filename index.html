@@ -340,7 +340,7 @@ const store = {
 };
 
 /* ================== ÉTAT ================== */
-let S = { version:9, users:[], products:[], clients:[], orders:[], expenses:[], suppliers:[], purchases:[], campaigns:[], employees:[], announcements:[], objectives:{}, settings:{tvaRate:18,tvaEnabled:true,pricesTTC:true,ninea:"",rccm:"",loyaltyEnabled:true,loyaltyRate:1,loyaltyPer:1000}, logs:[], seq:1, orderSeq:1, poSeq:1, invoiceSeq:1, clientSeq:1 };
+let S = { version:9, users:[], products:[], clients:[], orders:[], expenses:[], suppliers:[], purchases:[], campaigns:[], employees:[], announcements:[], promos:[], objectives:{}, settings:{tvaRate:18,tvaEnabled:true,pricesTTC:true,ninea:"",rccm:"",loyaltyEnabled:true,loyaltyRate:1,loyaltyPer:1000}, logs:[], seq:1, orderSeq:1, poSeq:1, invoiceSeq:1, clientSeq:1 };
 let session = null;      // {userId}
 let tab = "dash";
 let draft = null;
@@ -378,6 +378,27 @@ const esc = s => String(s??"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;"
 function toast(msg){ const t = el("toast"); t.textContent = msg; t.style.display = "block"; setTimeout(()=>t.style.display="none", 2400); }
 function nid(){ return S.seq++; }
 function nextMatricule(){ if(S.clientSeq===undefined) S.clientSeq=1; return "CLI-"+String(S.clientSeq++).padStart(4,"0"); }
+// Compresse/redimensionne une image en data-URL JPEG (pour le stockage léger)
+function compressImage(file, maxSize, quality){
+  return new Promise((resolve, reject)=>{
+    if(!file || !file.type.startsWith("image/")) return reject("non image");
+    const reader = new FileReader();
+    reader.onload = e=>{
+      const img = new Image();
+      img.onload = ()=>{
+        let {width:w, height:h} = img;
+        const m = maxSize||500;
+        if(w>h){ if(w>m){ h=Math.round(h*m/w); w=m; } }
+        else { if(h>m){ w=Math.round(w*m/h); h=m; } }
+        const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
+        const ctx=cv.getContext("2d"); ctx.fillStyle="#fff"; ctx.fillRect(0,0,w,h); ctx.drawImage(img,0,0,w,h);
+        try{ resolve(cv.toDataURL("image/jpeg", quality||.72)); }catch(err){ reject(err); }
+      };
+      img.onerror=reject; img.src=e.target.result;
+    };
+    reader.onerror=reject; reader.readAsDataURL(file);
+  });
+}
 
 /* ================== AUTH ================== */
 async function sha256(txt){
@@ -408,6 +429,17 @@ async function loadAll(){
   try{ const rs = await store.get(KEY_SESSION); if(rs) session = JSON.parse(rs); }catch(e){}
   if (session && !me()) session = null;
   render();
+  // QR agent : ?fac=FAC-XXXX → ouvre directement la facture une fois connecté
+  try{
+    const facParam = new URLSearchParams(location.search).get("fac");
+    if(facParam && me()){
+      const o = S.orders.find(x=> x.invoiceNum===facParam || x.num===facParam);
+      if(o){ tab="invoices"; render(); setTimeout(()=>openOrderDetail(o.id), 150); }
+      else { setTimeout(()=>toast("Facture "+facParam+" introuvable"), 400); }
+      // nettoie l'URL pour éviter de rouvrir au refresh
+      try{ history.replaceState(null,"",location.pathname); }catch(e){}
+    }
+  }catch(e){}
   // Écoute temps réel : tout changement venu d'un autre appareil rafraîchit l'écran
   if (FB.ok){
     FB.listen((blob, localWrite)=>{
@@ -546,6 +578,7 @@ function migrate(){
   if (!S.settings) S.settings = { tvaRate:18, tvaEnabled:true, pricesTTC:true, ninea:"", rccm:"" };
   if (S.settings.loyaltyEnabled === undefined){ S.settings.loyaltyEnabled=true; S.settings.loyaltyRate=1; S.settings.loyaltyPer=1000; }
   if (!S.announcements) S.announcements = [];
+  if (!S.promos) S.promos = [];
   (S.clients||[]).forEach(c=>{ if(c.points===undefined) c.points=0; if(!c.matricule){ c.matricule="CLI-"+String(S.clientSeq++).padStart(4,"0"); } });
 }
 
@@ -1044,21 +1077,27 @@ function vProducts(){
       <div><label>Prix de vente / carton (FCFA)</label><input id="p-price" type="number" min="0" placeholder="12500"></div>
       <div><label>Stock initial (cartons)</label><input id="p-stock" type="number" min="0" value="0"></div>
       <div><label>Seuil d'alerte</label><input id="p-alert" type="number" min="0" value="20"></div>
+      <div style="grid-column:1/-1"><label>Photo du produit (optionnel)</label>
+        <input id="p-img" type="file" accept="image/*" style="font-size:13px">
+        <div id="p-img-preview" style="margin-top:8px"></div>
+        <span class="muted" style="font-size:12px">La photo est automatiquement redimensionnée pour le web. Elle s'affichera dans le catalogue du portail.</span>
+      </div>
     </div>
     <div class="row" style="margin-top:10px"><button class="btn" id="p-add">Ajouter le produit</button>
     <span class="muted">Coût de revient = rendu entrepôt Dakar (achat + fret + douane).</span></div>
   </div>`:""}
   <div class="panel"><div class="tablewrap"><table>
-    <tr><th>Produit</th><th>Famille</th><th class="num">Coût</th><th class="num">Prix</th><th class="num">Marge</th><th class="num">Stock</th><th>État</th>${sr?"<th>Réception</th>":""}${pm?"<th></th>":""}</tr>
+    <tr><th>Photo</th><th>Produit</th><th>Famille</th><th class="num">Coût</th><th class="num">Prix</th><th class="num">Marge</th><th class="num">Stock</th><th>État</th>${sr?"<th>Réception</th>":""}${pm?"<th></th>":""}</tr>
     ${S.products.length? S.products.map(p=>{
       const mg = p.price? Math.round((p.price-p.cost)/p.price*100):0;
-      return `<tr><td><b>${esc(p.name)}</b></td><td class="muted">${esc(p.family)}</td>
+      return `<tr><td>${p.img?`<img src="${p.img}" style="width:42px;height:42px;object-fit:cover;border-radius:8px;cursor:pointer" data-pdetail="${p.id}">`:`<div style="width:42px;height:42px;border-radius:8px;background:var(--creme);display:flex;align-items:center;justify-content:center;color:#bbb;font-size:18px">📦</div>`}</td>
+      <td><b><a href="#" data-pdetail="${p.id}" style="color:var(--bleu);cursor:pointer">${esc(p.name)}</a></b></td><td class="muted">${esc(p.family)}</td>
       <td class="num">${fmt(p.cost)}</td><td class="num">${fmt(p.price)}</td><td class="num">${mg} %</td>
       <td class="num"><b>${p.stock}</b></td>
       <td>${p.stock<=p.alert?'<span class="badge alert">BAS</span>':'<span class="badge ok">OK</span>'}</td>
       ${sr?`<td><div class="row"><input type="number" min="1" style="width:64px" id="rcv-${p.id}" placeholder="qté"><button class="btn sm b" data-rcv="${p.id}">+ Stock</button></div></td>`:""}
-      ${pm?`<td><button class="del" data-delp="${p.id}" title="Supprimer">✕</button></td>`:""}</tr>`;
-    }).join("") : `<tr><td colspan="9" class="empty">Aucun produit.</td></tr>`}
+      ${pm?`<td class="row"><button class="btn sm ghost" data-pimg="${p.id}">📷</button><button class="del" data-delp="${p.id}" title="Supprimer">✕</button></td>`:""}</tr>`;
+    }).join("") : `<tr><td colspan="10" class="empty">Aucun produit.</td></tr>`}
   </table></div></div>`;
 }
 
@@ -1518,6 +1557,7 @@ function openProductDetail(id){
   const stockLow = p.stock<=(p.alert||0);
   const rows = recent.length? recent.map(({o,l})=>`<tr style="cursor:pointer" data-md-order="${o.id}"><td><b>${esc(o.num)}</b></td><td>${o.date}</td><td>${esc(clientName(o.clientId))}</td><td class="num">${l.qty}</td><td class="num">${fmt(l.qty*l.price)}</td></tr>`).join("") : `<tr><td colspan="5" class="empty">Aucune vente.</td></tr>`;
   openModal(`<div class="row" style="justify-content:space-between"><h3>${esc(p.name)}</h3><button class="x" onclick="closeModal()">×</button></div>
+    ${p.img?`<div style="text-align:center;margin:8px 0"><img src="${p.img}" style="max-width:200px;max-height:200px;border-radius:12px;border:1px solid #eee"></div>`:""}
     <p class="muted">${esc(p.family||"—")}</p>
     <div class="cards" style="margin:10px 0">
       <div class="card ${stockLow?'t':''}"><div class="v" style="font-size:16px">${p.stock}</div><div class="l">En stock${stockLow?" ⚠":""}</div></div>
@@ -1623,10 +1663,11 @@ function qrDataURL(text, cell){
     return qr.createDataURL(cell||4, 8);
   }catch(e){ console.warn("QR:", e); return ""; }
 }
-// Lien public vers la commande (page de suivi du portail)
+// Lien interne vers la facture dans Gestion (pour les agents)
 function orderTrackURL(o){
-  const base = (S.settings && S.settings.portalUrl) ? S.settings.portalUrl.replace(/\/$/,"") : "https://ablayembow.github.io/DISTRIVIA-Gestion/portail.html";
-  return base + "?cmd=" + encodeURIComponent(o.num);
+  const base = (S.settings && S.settings.gestionUrl) ? S.settings.gestionUrl.replace(/\/$/,"") : "https://ablayembow.github.io/DISTRIVIA-Gestion/";
+  const ref = o.invoiceNum || o.num;
+  return base + "?fac=" + encodeURIComponent(ref);
 }
 function orderReceiptHTML(o){
   const c = S.clients.find(c=>c.id===o.clientId)||{};
@@ -1640,7 +1681,7 @@ function orderReceiptHTML(o){
     <div style="display:flex;justify-content:space-between"><b>Bon de commande</b><b style="color:#0F2A4A">${esc(o.num)}</b></div>
     <div style="font-size:12px;color:#555;margin:6px 0">Date : ${o.date} · Paiement : ${o.payMode==="credit"?"Crédit":"Comptant"} · Statut : ${o.status==="cancelled"?"ANNULÉE":o.status}</div>
     <div style="font-size:12px;margin-bottom:8px"><b>Client :</b> ${esc(c.name||"")}${c.matricule?" ("+esc(c.matricule)+")":""}${c.phone?" · "+esc(c.phone):""}${c.zone?" · "+esc(c.zone):""}</div>
-    ${qrDataURL(orderTrackURL(o))?`<div style="text-align:center;margin:6px 0"><img src="${qrDataURL(orderTrackURL(o),3)}" width="78" height="78" alt="QR"><div style="font-size:9px;color:#888">Scannez pour suivre votre commande</div></div>`:""}
+    ${qrDataURL(orderTrackURL(o))?`<div style="text-align:center;margin:6px 0"><img src="${qrDataURL(orderTrackURL(o),3)}" width="78" height="78" alt="QR"><div style="font-size:9px;color:#888">Scan agent : ouvrir la facture</div></div>`:""}
     <table style="width:100%;border-collapse:collapse;font-size:12px"><tr style="background:#0F2A4A;color:#fff">
       <th style="padding:5px 6px;text-align:left">Produit</th><th style="padding:5px 6px;text-align:right">Qté</th><th style="padding:5px 6px;text-align:right">P.U.</th><th style="padding:5px 6px;text-align:right">Total</th></tr>
       ${rows}</table>
@@ -1684,7 +1725,7 @@ function invoiceHTML(o){
         <div style="background:#0F2A4A;color:#fff;padding:10px 18px;border-radius:8px"><div style="font-size:11px;letter-spacing:2px;opacity:.8">FACTURE</div><div style="font-size:18px;font-weight:800">${esc(num)}</div></div>
         <div style="font-size:12px;color:#555;margin-top:8px">Date : ${frDate(o.date)}</div>
         <div style="font-size:11px;color:#888">Réf. commande : ${esc(o.num)}</div>
-        ${qrDataURL(orderTrackURL(o))?`<div style="margin-top:8px;text-align:right"><img src="${qrDataURL(orderTrackURL(o))}" width="92" height="92" alt="QR commande" style="border:1px solid #eee;border-radius:6px"><div style="font-size:9px;color:#888;margin-top:2px">Scannez pour suivre la commande</div></div>`:""}
+        ${qrDataURL(orderTrackURL(o))?`<div style="margin-top:8px;text-align:right"><img src="${qrDataURL(orderTrackURL(o))}" width="92" height="92" alt="QR commande" style="border:1px solid #eee;border-radius:6px"><div style="font-size:9px;color:#888;margin-top:2px">Scan agent : ouvrir la facture</div></div>`:""}
       </div>
     </div>
     <div style="display:flex;justify-content:space-between;margin:16px 0">
@@ -2398,6 +2439,31 @@ function vMarketing(){
         <td class="row"><button class="btn sm ghost" data-anedit="${a.id}">Modifier</button><button class="btn sm ghost" data-antoggle="${a.id}">${a.active!==false?"Masquer":"Publier"}</button><button class="del" data-andel="${a.id}">✕</button></td>
       </tr>`).join("")}
     </table></div>`:`<p class="empty">Aucune annonce. Publiez votre première promo ou note d'information ci-dessus — elle apparaîtra sur le portail de vos clients.</p>`}
+  </div>
+
+  <div class="panel" style="border-left:4px solid var(--vert)">
+    <h3 style="margin-bottom:4px">🏷️ Promotions & réductions de prix</h3>
+    <p class="muted" style="margin-bottom:12px">Appliquez une réduction sur un produit ou une famille entière. Le prix barré et le prix promo s'affichent sur le portail (comme Jumia).</p>
+    <div class="grid2">
+      <div><label>Cible</label><select id="pr-target">
+        <option value="all">Tout le catalogue</option>
+        <optgroup label="Par famille">${FAMILIES.map(f=>`<option value="fam:${esc(f)}">${esc(f)}</option>`).join("")}</optgroup>
+        <optgroup label="Par produit">${S.products.map(p=>`<option value="prod:${p.id}">${esc(p.name)}</option>`).join("")}</optgroup>
+      </select></div>
+      <div><label>Réduction (%)</label><input id="pr-pct" type="number" min="1" max="90" placeholder="Ex. 15"></div>
+      <div><label>Étiquette (optionnel)</label><input id="pr-label" placeholder="Ex. Soldes Tabaski"></div>
+      <div><label>Expire le (optionnel)</label><input id="pr-expire" type="date"></div>
+    </div>
+    <div class="row" style="margin-top:10px"><button class="btn b" id="pr-add">Activer la promotion</button></div>
+    ${(S.promos&&S.promos.length)?`<div class="tablewrap" style="margin-top:14px"><table>
+      <tr><th>Cible</th><th>Réduction</th><th>Étiquette</th><th>Expire</th><th>État</th><th></th></tr>
+      ${S.promos.map(pr=>{
+        const expired = pr.expire && pr.expire<today();
+        const tgt = pr.target==="all"?"Tout le catalogue":(pr.target.startsWith("fam:")?("Famille : "+pr.target.slice(4)):("Produit : "+((S.products.find(p=>p.id===+pr.target.slice(5))||{}).name||"?")));
+        return `<tr><td>${esc(tgt)}</td><td><b style="color:var(--vert)">−${pr.pct}%</b></td><td class="muted">${esc(pr.label||"—")}</td><td class="muted">${pr.expire||"—"}${expired?' <span class="badge off">expirée</span>':""}</td><td>${pr.active!==false&&!expired?'<span class="badge ok">Active</span>':'<span class="badge off">Inactive</span>'}</td>
+        <td class="row"><button class="btn sm ghost" data-prtoggle="${pr.id}">${pr.active!==false?"Désactiver":"Activer"}</button><button class="del" data-prdel="${pr.id}">✕</button></td></tr>`;
+      }).join("")}
+    </table></div>`:`<p class="empty" style="margin-top:10px">Aucune promotion active.</p>`}
   </div>`:""}
 
   ${can("marketing")?`<div class="panel"><h3>${ec?"Modifier la campagne":"Nouvelle campagne (suivi interne)"}</h3>
@@ -2637,13 +2703,31 @@ function bindApp(){
   }
 
   // Produits
+  // aperçu de la photo au moment de l'ajout
+  let pendingImg = null;
+  const pImg = el("p-img");
+  if(pImg) pImg.onchange = async (e)=>{
+    const f=e.target.files[0]; if(!f) return;
+    try{ pendingImg = await compressImage(f, 500, .72);
+      el("p-img-preview").innerHTML = `<img src="${pendingImg}" style="width:90px;height:90px;object-fit:cover;border-radius:10px;border:1px solid #eee">`;
+    }catch(err){ toast("Image trop lourde ou invalide"); pendingImg=null; }
+  };
   const pAdd = el("p-add");
   if(pAdd) pAdd.onclick = async ()=>{
     const name = el("p-name").value.trim(); if(!name) return toast("Nom du produit requis");
-    S.products.push({ id:nid(), name, family:el("p-fam").value, cost:+el("p-cost").value||0, price:+el("p-price").value||0, stock:+el("p-stock").value||0, alert:+el("p-alert").value||0 });
+    S.products.push({ id:nid(), name, family:el("p-fam").value, cost:+el("p-cost").value||0, price:+el("p-price").value||0, stock:+el("p-stock").value||0, alert:+el("p-alert").value||0, img:pendingImg||null });
     log("Produit créé : "+name);
     await save(); render(); toast("Produit ajouté ✓");
   };
+  // changer/ajouter une photo sur un produit existant
+  document.querySelectorAll("[data-pimg]").forEach(b=> b.onclick = ()=>{
+    const id=+b.dataset.pimg;
+    const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*";
+    inp.onchange=async (e)=>{ const f=e.target.files[0]; if(!f) return;
+      try{ const img=await compressImage(f,500,.72); const p=S.products.find(p=>p.id===id); p.img=img; log("Photo mise à jour : "+p.name); await save(); render(); toast("Photo enregistrée ✓"); }
+      catch(err){ toast("Image invalide"); } };
+    inp.click();
+  });
   document.querySelectorAll("[data-rcv]").forEach(b=> b.onclick = async ()=>{
     const id=+b.dataset.rcv, q=+el("rcv-"+id).value;
     if(!q||q<1) return toast("Indiquez la quantité reçue");
@@ -3014,6 +3098,26 @@ function bindApp(){
     log("Annonce supprimée"); await save(); render();
   });
 
+  // ===== Promotions / réductions =====
+  const prAdd = el("pr-add");
+  if(prAdd) prAdd.onclick = async ()=>{
+    const pct = +el("pr-pct").value||0;
+    if(pct<1 || pct>90) return toast("Réduction entre 1 et 90 %");
+    S.promos = S.promos || [];
+    S.promos.push({ id:nid(), target:el("pr-target").value, pct, label:el("pr-label").value.trim(), expire:el("pr-expire").value||"", active:true, created:today() });
+    log("Promotion créée : −"+pct+"%");
+    await save(); render(); toast("Promotion activée ✓ — visible sur le portail");
+  };
+  document.querySelectorAll("[data-prtoggle]").forEach(b=> b.onclick = async ()=>{
+    const pr=S.promos.find(p=>p.id===+b.dataset.prtoggle); pr.active = pr.active===false;
+    await save(); render(); toast(pr.active?"Promotion activée":"Promotion désactivée");
+  });
+  document.querySelectorAll("[data-prdel]").forEach(b=> b.onclick = async ()=>{
+    if(!confirm("Supprimer cette promotion ?")) return;
+    S.promos=S.promos.filter(p=>p.id!==+b.dataset.prdel);
+    await save(); render(); toast("Promotion supprimée");
+  });
+
   // ===== Ressources humaines =====
   const hrSave = el("hr-save");
   if(hrSave) hrSave.onclick = async ()=>{
@@ -3087,7 +3191,7 @@ function bindApp(){
     el("bk-reset").onclick = async ()=>{
       if(!confirm("Effacer TOUTES les données (y compris les comptes) ? Irréversible."))return;
       if(!confirm("Vraiment sûr ? Exportez d'abord une sauvegarde."))return;
-      S={version:9, users:[], products:[], clients:[], orders:[], expenses:[], suppliers:[], purchases:[], campaigns:[], employees:[], announcements:[], objectives:{}, settings:{tvaRate:18,tvaEnabled:true,pricesTTC:true,ninea:"",rccm:"",loyaltyEnabled:true,loyaltyRate:1,loyaltyPer:1000}, logs:[], seq:1, orderSeq:1, poSeq:1, invoiceSeq:1, clientSeq:1};
+      S={version:9, users:[], products:[], clients:[], orders:[], expenses:[], suppliers:[], purchases:[], campaigns:[], employees:[], announcements:[], promos:[], objectives:{}, settings:{tvaRate:18,tvaEnabled:true,pricesTTC:true,ninea:"",rccm:"",loyaltyEnabled:true,loyaltyRate:1,loyaltyPer:1000}, logs:[], seq:1, orderSeq:1, poSeq:1, invoiceSeq:1, clientSeq:1};
       session=null; await save(); await saveSession(); render();
     };
   }
