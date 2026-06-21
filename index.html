@@ -355,6 +355,8 @@ let modalContent = null;  // contenu de la modale active
 let searchQ = "";
 // Périodes (filtres) — par défaut depuis le début de l'année
 let acctPeriod = { from:"", to:"" };
+let acctAccount = ""; // filtre grand-livre par compte
+let closingMonth = ""; // mois sélectionné pour le closing
 let ctrlPeriod = { from:"", to:"" };
 let cashPeriod = { from:"", to:"" };
 let monitorPeriod = { from:"", to:"" };
@@ -581,6 +583,7 @@ function migrate(){
   if (S.settings.loyaltyEnabled === undefined){ S.settings.loyaltyEnabled=true; S.settings.loyaltyRate=1; S.settings.loyaltyPer=1000; }
   if (!S.announcements) S.announcements = [];
   if (!S.promos) S.promos = [];
+  if (!S.cashSessions) S.cashSessions = []; // sessions de caisse (ouverture/fermeture)
   (S.clients||[]).forEach(c=>{ if(c.points===undefined) c.points=0; if(!c.matricule){ c.matricule="CLI-"+String(S.clientSeq++).padStart(4,"0"); } });
 }
 
@@ -859,7 +862,7 @@ function vInvoices(){
         <td class="num">${fmt(x.paid)}</td>
         <td class="num">${x.due?'<span style="color:var(--terra)">'+fmt(x.due)+'</span>':'—'}</td>
         <td>${stLabel[x.st]}</td>
-        <td class="row"><button class="btn sm ghost" data-invview="${x.o.id}">Voir</button><button class="btn sm ghost" data-invprint="${x.o.id}">Imprimer</button></td>
+        <td class="row"><button class="btn sm ghost" data-invview="${x.o.id}">Voir</button><button class="btn sm b" data-invpdf="${x.o.id}">⬇ PDF</button><button class="btn sm ghost" data-invprint="${x.o.id}">Imprimer</button></td>
       </tr>`).join("") : `<tr><td colspan="9" class="empty">Aucune facture ${(invFilter!=="all"||invSearch||invFrom||invTo)?"pour ces critères":"— générez-en depuis une commande ou ci-dessus"}.</td></tr>`}
     </table></div>
   </div>`;
@@ -870,6 +873,7 @@ function bindInvoices(){
   document.querySelectorAll("[data-makeinv]").forEach(b=> b.onclick = async ()=>{ const o=S.orders.find(o=>o.id===+b.dataset.makeinv); if(o){ assignInvoiceNum(o); await save(); render(); toast("Facture "+o.invoiceNum+" générée ✓"); } });
   document.querySelectorAll("[data-invview]").forEach(b=> b.onclick = ()=> openOrderDetail(+b.dataset.invview));
   document.querySelectorAll("[data-invprint]").forEach(b=> b.onclick = ()=>{ const o=S.orders.find(o=>o.id===+b.dataset.invprint); if(o) printHTML(invoiceHTML(o)); });
+  document.querySelectorAll("[data-invpdf]").forEach(b=> b.onclick = ()=>{ const o=S.orders.find(o=>o.id===+b.dataset.invpdf); if(o) downloadInvoicePDF(o); });
   const csv=el("exp-invoices-csv"); if(csv) csv.onclick = ()=> exportInvoicesCSV();
   // Filtres : recherche + dates
   const se=el("inv-search"); if(se) se.oninput=()=>{ invSearch=se.value; const pos=se.selectionStart; render(); const ns=el("inv-search"); if(ns){ ns.focus(); try{ns.setSelectionRange(pos,pos);}catch(e){} } };
@@ -1006,9 +1010,13 @@ function vWebOrders(){
 
   <div class="grid2">
     <div class="panel"><h3>📅 Rendez-vous (${webAppointments.length})</h3>
-    ${webAppointments.length?`<div class="tablewrap"><table><tr><th>Client</th><th>Objet</th><th>Quand</th><th></th></tr>
-      ${[...webAppointments].sort((a,b)=>(a.created<b.created?1:-1)).map(a=>`<tr><td>${esc(a.client_name||"")}</td><td class="muted">${esc(a.subject||"")}</td><td>${esc(a.date||"")} ${esc(a.slot||"")}</td>
-      <td>${a.status==="pending"?`<button class="btn sm b" data-webappt="${esc(a._id)}">Confirmer</button>`:`<span class="badge paid">OK</span>`}</td></tr>`).join("")}
+    ${webAppointments.length?`<div class="tablewrap"><table><tr><th>Client</th><th>Objet</th><th>Quand</th><th>Statut</th><th></th></tr>
+      ${[...webAppointments].sort((a,b)=>(a.created<b.created?1:-1)).map(a=>{
+        const stBadge = a.status==="cancelled"?'<span class="badge off">Annulé</span>':(a.status==="confirmed"?'<span class="badge paid">Confirmé</span>':'<span class="badge pending">En attente</span>');
+        return `<tr><td>${esc(a.client_name||"")}</td><td class="muted">${esc(a.subject||"")}</td><td>${esc(a.date||"")} ${esc(a.slot||"")}</td>
+        <td>${stBadge}${a.cancelReason?`<div class="muted" style="font-size:11px">📝 ${esc(a.cancelReason)}</div>`:""}</td>
+        <td>${a.status==="pending"?`<button class="btn sm b" data-webappt="${esc(a._id)}">Confirmer</button>`:""}</td></tr>`;
+      }).join("")}
     </table></div>`:`<p class="empty">Aucun rendez-vous.</p>`}
     </div>
     <div class="panel"><h3>💬 Messagerie</h3>
@@ -1224,6 +1232,7 @@ function vOrders(){
 }
 
 function vCash(){
+  const openSession = (S.cashSessions||[]).find(s=>!s.closedAt) || null;
   const payable = S.orders.filter(o=>o.status!=="cancelled" && o.invoiceNum && orderDue(o)>0).sort((a,b)=>b.id-a.id);
   const notInvoiced = S.orders.filter(o=>o.status!=="cancelled" && !o.invoiceNum && o.delivered && orderDue(o)>0).length;
   const cf = cashPeriod.from, ct = cashPeriod.to;
@@ -1245,6 +1254,23 @@ function vCash(){
     <div class="card ${tin-tout<0?'r':''}"><div class="v">${fmt(tin-tout)}</div><div class="l">Solde${periodActive?" (période)":""}</div></div>
     ${Object.entries(byMethod).map(([m,v])=>`<div class="card"><div class="v" style="font-size:16px">${fmt(v)}</div><div class="l">${esc(m)}</div></div>`).join("")}
   </div>
+
+  ${can("orders_pay")?`<div class="panel" style="border-left:4px solid ${openSession?'var(--vert)':'var(--gris)'}">
+    <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px;align-items:center">
+      <div>
+        <h3 style="margin:0 0 2px">🧰 Session de caisse</h3>
+        ${openSession
+          ? `<p class="muted" style="margin:0">Caisse <b style="color:var(--vert)">OUVERTE</b> depuis le ${frDateTime(openSession.openedAt)} par ${esc(openSession.openedBy||"—")} · Fonds initial : <b>${fmt(openSession.openingFloat||0)}</b></p>`
+          : `<p class="muted" style="margin:0">Caisse <b>FERMÉE</b>. Ouvrez une session pour suivre les encaissements et générer un arrêté de caisse.</p>`}
+      </div>
+      <div class="row">
+        ${openSession
+          ? `<button class="btn" style="background:var(--rouge)" id="cash-close">Fermer la caisse / Arrêté</button>`
+          : `<button class="btn b" id="cash-open">Ouvrir la caisse</button>`}
+        ${(S.cashSessions||[]).filter(s=>s.closedAt).length?`<button class="btn ghost" id="cash-history">Historique (${(S.cashSessions||[]).filter(s=>s.closedAt).length})</button>`:""}
+      </div>
+    </div>
+  </div>`:""}
   ${can("orders_pay")?`<div class="panel"><h3>Encaisser un versement</h3>
     ${notInvoiced>0?`<div class="infobox" style="margin-bottom:10px">📄 ${notInvoiced} commande(s) livrée(s) ne sont pas encore facturées. <b>Générez la facture</b> (onglet Commandes ou Factures) avant de pouvoir encaisser.</div>`:""}
     ${payable.length?`<div class="grid2">
@@ -1486,12 +1512,65 @@ function startNewOrderFor(clientId){
 window.startNewOrderFor = startNewOrderFor;
 
 /* ================== FICHES DÉTAIL (cliquables) ================== */
+// Point 5 : annulations avec confirmation et trace
+function cancelPayment(orderId, payId){
+  if(!can("orders_pay")) return toast("Droit insuffisant");
+  const o=S.orders.find(o=>o.id===orderId); if(!o) return;
+  const p=(o.payments||[]).find(p=>p.id===payId); if(!p) return;
+  confirmAction({title:"Annuler ce versement", message:`Annuler le versement de <b>${fmt(p.amount)}</b> (${esc(p.method||"")}) du ${frDate(p.date)} ?<br><br>Le reste dû de la facture sera recalculé. Une trace est conservée dans le journal.`, okLabel:"Annuler le versement", danger:true}, async ()=>{
+    o.payments = o.payments.filter(x=>x.id!==payId);
+    refreshStatus(o);
+    log("Versement ANNULÉ : "+(o.invoiceNum||o.num)+" — "+fmt(p.amount)+" ("+(p.method||"")+")");
+    await save(); render(); if(el("modal").innerHTML) openOrderDetail(orderId); toast("Versement annulé");
+  });
+}
+function cancelInvoice(orderId){
+  if(!can("orders_pay")) return toast("Droit insuffisant");
+  const o=S.orders.find(o=>o.id===orderId); if(!o||!o.invoiceNum) return;
+  if(orderPaid(o)>0) return toast("Cette facture a des versements. Annulez d'abord les versements.");
+  confirmAction({title:"Annuler la facture", message:`Annuler la facture <b>${esc(o.invoiceNum)}</b> ?<br><br>Le numéro sera retiré et la commande pourra être refacturée. Une trace est conservée.`, okLabel:"Annuler la facture", danger:true}, async ()=>{
+    log("Facture ANNULÉE : "+o.invoiceNum+" (commande "+o.num+")");
+    o.cancelledInvoices = o.cancelledInvoices||[]; o.cancelledInvoices.push({num:o.invoiceNum, date:today(), by:me().name});
+    o.invoiceNum = null;
+    await save(); render(); closeModal(); toast("Facture annulée");
+  });
+}
+window.cancelPayment = cancelPayment; window.cancelInvoice = cancelInvoice;
+// Annulation de commande avec saisie du motif (dialogue stylé)
+function cancelOrderWithReason(orderId){
+  if(!can("orders_cancel")) return toast("Droit insuffisant");
+  const o=S.orders.find(o=>o.id===orderId); if(!o||o.status==="cancelled") return;
+  const paidWarn = orderPaid(o)>0 ? `<div style="background:#FFF3E0;border-left:3px solid var(--terra);padding:8px;border-radius:4px;margin-bottom:10px;font-size:13px">⚠ Cette commande a reçu <b>${fmt(orderPaid(o))}</b> de versements. Ils resteront tracés dans le journal.</div>` : "";
+  el("confirm").innerHTML = `<div class="modalbg" id="cobg" style="z-index:120"><div class="modal" style="max-width:420px">
+    <h3 style="color:var(--rouge);margin-bottom:8px">Annuler la commande ${esc(o.num)}</h3>
+    ${paidWarn}
+    <p class="muted" style="margin-bottom:8px">Cette action est définitive. Une trace est conservée${o.delivered?" et le stock sera réintégré":""}.</p>
+    <label>Motif de l'annulation</label>
+    <select id="co-reason"><option>Erreur de saisie</option><option>Annulation client</option><option>Rupture de stock</option><option>Doublon</option><option>Litige / réclamation</option><option>Autre</option></select>
+    <input id="co-reason-other" placeholder="Précisez le motif…" style="margin-top:6px;display:none">
+    <div class="row" style="justify-content:flex-end;gap:8px;margin-top:16px">
+      <button class="btn ghost" id="co-cancel">Retour</button>
+      <button class="btn" style="background:var(--rouge)" id="co-ok">Confirmer l'annulation</button>
+    </div></div></div>`;
+  const sel=el("co-reason"), other=el("co-reason-other");
+  sel.onchange=()=>{ other.style.display = sel.value==="Autre"?"block":"none"; };
+  el("co-cancel").onclick=()=>{ el("confirm").innerHTML=""; };
+  el("cobg").onclick=e=>{ if(e.target.id==="cobg") el("confirm").innerHTML=""; };
+  el("co-ok").onclick=async ()=>{
+    const reason = sel.value==="Autre" ? (other.value.trim()||"Autre") : sel.value;
+    if(o.delivered){ o.lines.forEach(l=>{ const p=S.products.find(p=>p.id===l.productId); if(p) p.stock+=l.qty; }); }
+    o.status="cancelled"; o.delivered=false; o.cancelReason=reason; o.cancelledBy=me().name; o.cancelledAt=now();
+    log("Commande ANNULÉE : "+o.num+" — "+reason);
+    el("confirm").innerHTML=""; await save(); render(); closeModal(); toast("Commande "+o.num+" annulée");
+  };
+}
+window.cancelOrderWithReason = cancelOrderWithReason;
 function openOrderDetail(id){
   const o = S.orders.find(o=>o.id===id); if(!o) return;
   const c = S.clients.find(c=>c.id===o.clientId)||{};
   const due = orderDue(o), paid = orderPaid(o);
   const lignes = o.lines.map(l=>`<tr><td>${esc(prodName(l.productId))}</td><td class="num">${l.qty}</td><td class="num">${fmt(l.price)}</td><td class="num">${fmt(l.qty*l.price)}</td></tr>`).join("");
-  const pays = (o.payments||[]).length ? o.payments.map(p=>`<tr><td>${p.date}</td><td>${esc(p.method||"—")}</td><td class="muted">${esc(p.by||"")}</td><td class="num" style="color:var(--vert)">${fmt(p.amount)}</td></tr>`).join("") : `<tr><td colspan="4" class="empty">Aucun versement.</td></tr>`;
+  const pays = (o.payments||[]).length ? o.payments.map(p=>`<tr><td>${p.date}</td><td>${esc(p.method||"—")}</td><td class="muted">${esc(p.by||"")}</td><td class="num" style="color:var(--vert)">${fmt(p.amount)}</td><td>${can("orders_pay")?`<button class="del" data-cancelpay="${p.id}" title="Annuler ce versement">✕</button>`:""}</td></tr>`).join("") : `<tr><td colspan="5" class="empty">Aucun versement.</td></tr>`;
   const overdue = o.payMode==="credit" && o.dueDate && due>0 && o.dueDate<today();
   openModal(`<div class="row" style="justify-content:space-between"><h3>Commande ${esc(o.num)}</h3><button class="x" onclick="closeModal()">×</button></div>
     <div class="cards" style="margin-bottom:10px">
@@ -1505,13 +1584,16 @@ function openOrderDetail(id){
     <h4 style="margin:8px 0 4px;color:var(--bleu)">Articles</h4>
     <div class="tablewrap"><table><tr><th>Produit</th><th class="num">Qté</th><th class="num">P.U.</th><th class="num">Total</th></tr>${lignes}</table></div>
     <h4 style="margin:12px 0 4px;color:var(--bleu)">Versements</h4>
-    <div class="tablewrap"><table><tr><th>Date</th><th>Moyen</th><th>Par</th><th class="num">Montant</th></tr>${pays}</table></div>
+    <div class="tablewrap"><table><tr><th>Date</th><th>Moyen</th><th>Par</th><th class="num">Montant</th><th></th></tr>${pays}</table></div>
     <div class="row" style="margin-top:14px;flex-wrap:wrap">
       ${!o.delivered&&o.status!=="cancelled"&&can("orders_deliver")?`<button class="btn b" data-md-deliver="${o.id}">Livrer</button>`:""}
       ${o.status!=="cancelled"&&can("orders_edit")?`<button class="btn ghost" data-md-edit="${o.id}">Modifier</button>`:""}
       <button class="btn ghost" data-md-receipt="${o.id}">Reçu / imprimer</button>
       <button class="btn b" data-md-invoice="${o.id}">📄 Facture</button>
+      <button class="btn ghost" data-md-invpdf="${o.id}">⬇ PDF</button>
       ${due>0&&o.invoiceNum?`<span class="muted" style="align-self:center;font-size:13px">💰 Encaissement à la Caisse</span>`:""}
+      ${o.invoiceNum&&orderPaid(o)===0&&can("orders_pay")?`<button class="btn ghost" style="color:var(--rouge)" data-md-cancelinv="${o.id}">Annuler facture</button>`:""}
+      ${o.status!=="cancelled"&&can("orders_cancel")?`<button class="btn" style="background:var(--rouge)" data-md-cancelorder="${o.id}">Annuler commande</button>`:""}
       <button class="btn ghost" onclick="closeModal()">Fermer</button>
     </div>`);
   // handlers internes de la modale
@@ -1522,6 +1604,10 @@ function openOrderDetail(id){
   if(q("[data-md-edit]")) q("[data-md-edit]").onclick=()=>{ closeModal(); startEditOrder(o.id); };
   if(q("[data-md-receipt]")) q("[data-md-receipt]").onclick=()=>{ printHTML(orderReceiptHTML(o)); };
   if(q("[data-md-invoice]")) q("[data-md-invoice]").onclick=async ()=>{ assignInvoiceNum(o); await save(); closeModal(); render(); toast("Facture "+o.invoiceNum+" générée ✓ — encaissement à la Caisse"); printHTML(invoiceHTML(o)); };
+  if(q("[data-md-invpdf]")) q("[data-md-invpdf]").onclick=async ()=>{ assignInvoiceNum(o); await save(); downloadInvoicePDF(o); };
+  if(q("[data-md-cancelinv]")) q("[data-md-cancelinv]").onclick=()=> cancelInvoice(o.id);
+  if(q("[data-md-cancelorder]")) q("[data-md-cancelorder]").onclick=()=> cancelOrderWithReason(o.id);
+  el("modal").querySelectorAll("[data-cancelpay]").forEach(b=> b.onclick=()=> cancelPayment(o.id, +b.dataset.cancelpay));
 }
 
 function openClientDetail(id){
@@ -1695,6 +1781,304 @@ function printHTML(inner){
   window.print();
   setTimeout(()=>{ pa.style.display="none"; pa.innerHTML=""; }, 400);
 }
+
+/* ================== GÉNÉRATION PDF (jsPDF) ================== */
+function pdfMoney(n){ return (Math.round(n)||0).toLocaleString("fr-FR").replace(/[\s\u202f\u00a0]/g," ")+" F"; }
+// En-tête de marque DISTRIVIA dessiné dans le PDF (logo wordmark + barre terracotta)
+function pdfBrandHeader(doc, opts){
+  opts = opts||{};
+  const W = doc.internal.pageSize.getWidth();
+  // bandeau bleu nuit
+  doc.setFillColor(15,42,74); doc.rect(0,0,W,26,"F");
+  doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(20);
+  doc.text("DISTRIVIA", 14, 13);
+  // barre terracotta (signature)
+  doc.setFillColor(200,94,45); doc.rect(14, 16, 34, 1.6, "F");
+  doc.setFont("helvetica","normal"); doc.setFontSize(7); doc.setTextColor(200,210,225);
+  doc.text("DISTRIBUTION GROUP", 14, 22);
+  // coordonnées à droite
+  doc.setFontSize(8); doc.setTextColor(220,228,238);
+  const st = S.settings||{};
+  const right = ["Dakar · Sénégal", "contact@distrivia.sn · +221 77 527 82 24"];
+  if(st.ninea||st.rccm){ right.push((st.ninea?"NINEA "+st.ninea:"")+(st.ninea&&st.rccm?" · ":"")+(st.rccm?"RCCM "+st.rccm:"")); }
+  right.forEach((line,i)=> doc.text(line, W-14, 9+i*4.5, {align:"right"}));
+  // titre du document
+  if(opts.title){
+    doc.setTextColor(15,42,74); doc.setFont("helvetica","bold"); doc.setFontSize(15);
+    doc.text(opts.title, 14, 38);
+  }
+  if(opts.subtitle){
+    doc.setTextColor(120,120,120); doc.setFont("helvetica","normal"); doc.setFontSize(9);
+    doc.text(opts.subtitle, 14, 44);
+  }
+  return opts.title ? 50 : 32;
+}
+function pdfFooter(doc, note){
+  const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
+  doc.setDrawColor(225,221,212); doc.line(14, H-16, W-14, H-16);
+  doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(140,140,140);
+  doc.text(note||"DISTRIVIA Distribution Group · Dakar, Sénégal", 14, H-11);
+  doc.text("Édité le "+frDate(today()), W-14, H-11, {align:"right"});
+}
+// FACTURE en PDF téléchargeable
+function pdfInvoice(o){
+  const { jsPDF } = window.jspdf; const doc = new jsPDF({unit:"mm",format:"a4"});
+  const W = doc.internal.pageSize.getWidth();
+  const c = S.clients.find(c=>c.id===o.clientId)||{};
+  const num = o.invoiceNum || "—";
+  const ttc=orderTotal(o), tva=orderTVA(o), ht=ttc-tva, paid=orderPaid(o), due=orderDue(o);
+  pdfBrandHeader(doc, {});
+  // bloc numéro facture
+  doc.setFillColor(15,42,74); doc.roundedRect(W-74, 30, 60, 16, 2, 2, "F");
+  doc.setTextColor(200,210,225); doc.setFontSize(7); doc.text("FACTURE", W-70, 36);
+  doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(13); doc.text(num, W-70, 43);
+  doc.setTextColor(90,90,90); doc.setFont("helvetica","normal"); doc.setFontSize(9);
+  doc.text("Date : "+frDate(o.date), W-14, 52, {align:"right"});
+  doc.text("Réf. commande : "+(o.num||""), W-14, 57, {align:"right"});
+  // client
+  doc.setTextColor(140,140,140); doc.setFontSize(8); doc.text("FACTURÉ À", 14, 36);
+  doc.setTextColor(26,26,26); doc.setFont("helvetica","bold"); doc.setFontSize(12);
+  doc.text((c.name||"Client")+(c.matricule?"  ("+c.matricule+")":""), 14, 43);
+  doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(80,80,80);
+  let cy=48; if(c.type){ doc.text(c.type, 14, cy); cy+=4.5; }
+  if(c.phone){ doc.text(c.phone, 14, cy); cy+=4.5; }
+  if(c.zone){ doc.text(c.zone+", Dakar", 14, cy); cy+=4.5; }
+  // conditions
+  doc.setTextColor(140,140,140); doc.setFontSize(8); doc.text("CONDITIONS", W-14, 64, {align:"right"});
+  doc.setTextColor(60,60,60); doc.setFontSize(9);
+  doc.text(o.payMode==="credit"?("Crédit"+(o.dueDate?" — échéance "+frDate(o.dueDate):"")):"Comptant", W-14, 69, {align:"right"});
+  doc.text("Livraison : "+(o.delivered?"effectuée":"à venir"), W-14, 73, {align:"right"});
+  // tableau lignes
+  let y = Math.max(cy, 78) + 4;
+  doc.setFillColor(15,42,74); doc.rect(14, y, W-28, 8, "F");
+  doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(8.5);
+  doc.text("Désignation", 16, y+5.5);
+  doc.text("Qté", W-78, y+5.5, {align:"right"});
+  doc.text("P.U. HT", W-48, y+5.5, {align:"right"});
+  doc.text("Montant HT", W-16, y+5.5, {align:"right"});
+  y+=8; doc.setTextColor(40,40,40); doc.setFont("helvetica","normal"); doc.setFontSize(9);
+  o.lines.forEach((l,i)=>{
+    if(y>250){ doc.addPage(); y=20; }
+    const lineTTC=l.qty*l.price; const puHT=tva>0?l.price/(1+tvaRate()/100):l.price; const lineHT=tva>0?lineTTC/(1+tvaRate()/100):lineTTC;
+    if(i%2){ doc.setFillColor(245,241,232); doc.rect(14,y,W-28,7,"F"); }
+    doc.text(String(prodName(l.productId)||l.name||"").slice(0,52), 16, y+5);
+    doc.text(String(l.qty), W-78, y+5, {align:"right"});
+    doc.text(pdfMoney(puHT), W-48, y+5, {align:"right"});
+    doc.text(pdfMoney(lineHT), W-16, y+5, {align:"right"});
+    y+=7;
+  });
+  // totaux
+  y+=4; const bx=W-90;
+  doc.setFont("helvetica","normal"); doc.setFontSize(9.5); doc.setTextColor(80,80,80);
+  doc.text("Total HT", bx, y); doc.text(pdfMoney(ht), W-16, y, {align:"right"}); y+=6;
+  if(tva>0){ doc.text("TVA "+tvaRate()+" %", bx, y); doc.text(pdfMoney(tva), W-16, y, {align:"right"}); y+=6; }
+  else { doc.setTextColor(140,140,140); doc.text("Non assujetti à la TVA", bx, y); y+=6; }
+  doc.setFillColor(245,241,232); doc.rect(bx-4, y-4.5, W-16-(bx-4)+4, 9, "F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.setTextColor(15,42,74);
+  doc.text("TOTAL"+(tva>0?" TTC":""), bx, y+1.5); doc.text(pdfMoney(ttc), W-16, y+1.5, {align:"right"}); y+=11;
+  doc.setFontSize(9.5);
+  if(paid>0){ doc.setTextColor(46,107,62); doc.setFont("helvetica","normal"); doc.text("Déjà payé", bx, y); doc.text(pdfMoney(paid), W-16, y, {align:"right"}); y+=6; }
+  if(due>0){ doc.setTextColor(200,94,45); doc.setFont("helvetica","bold"); doc.text("Reste à payer", bx, y); doc.text(pdfMoney(due), W-16, y, {align:"right"}); y+=6; }
+  else { doc.setTextColor(46,107,62); doc.setFont("helvetica","bold"); doc.text("✓ Facture acquittée", bx, y); y+=6; }
+  // QR agent
+  const qr = qrDataURL(orderTrackURL(o));
+  if(qr){ try{ doc.addImage(qr, "GIF", 14, y-2, 24, 24); doc.setFontSize(7); doc.setTextColor(140,140,140); doc.setFont("helvetica","normal"); doc.text("Scan agent : facture", 14, y+25); }catch(e){} }
+  // mention
+  doc.setFont("helvetica","normal"); doc.setFontSize(8.5); doc.setTextColor(90,90,90);
+  doc.text("Arrêtée la présente facture à la somme de "+pdfMoney(ttc)+".", 44, y+6, {maxWidth:W-58});
+  doc.text("Règlement par espèces, Wave, Orange Money, virement ou chèque à l'ordre de DISTRIVIA. Merci de votre confiance.", 44, y+11, {maxWidth:W-58});
+  pdfFooter(doc);
+  return doc;
+}
+function downloadInvoicePDF(o){ const doc=pdfInvoice(o); doc.save((o.invoiceNum||o.num||"facture")+".pdf"); toast("Facture PDF téléchargée ✓"); }
+
+// REÇU DE VERSEMENT en PDF (avec logo)
+function pdfPaymentReceipt(o, p){
+  const { jsPDF } = window.jspdf; const doc = new jsPDF({unit:"mm",format:"a5"});
+  const W = doc.internal.pageSize.getWidth();
+  const c = S.clients.find(c=>c.id===o.clientId)||{};
+  let y = pdfBrandHeader(doc, {title:"REÇU DE VERSEMENT", subtitle:"N° "+(p.id||"")+" · "+frDate(p.date)});
+  y+=4;
+  doc.setDrawColor(225,221,212); doc.setFillColor(250,249,246); doc.roundedRect(14, y, W-28, 44, 2, 2, "FD");
+  doc.setFont("helvetica","normal"); doc.setFontSize(9.5); doc.setTextColor(80,80,80);
+  const rows=[["Client", (c.name||"")+(c.matricule?" ("+c.matricule+")":"")],
+    ["Facture / commande", (o.invoiceNum||o.num||"")],
+    ["Moyen de paiement", p.method||"Espèces"],
+    ["Encaissé par", p.by||""]];
+  let ry=y+8; rows.forEach(r=>{ doc.setTextColor(140,140,140); doc.text(r[0], 18, ry); doc.setTextColor(40,40,40); doc.text(String(r[1]).slice(0,40), W-18, ry, {align:"right"}); ry+=8; });
+  y+=50;
+  // montant en grand
+  doc.setFillColor(46,107,62); doc.roundedRect(14, y, W-28, 16, 2, 2, "F");
+  doc.setTextColor(255,255,255); doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.text("MONTANT REÇU", 18, y+6);
+  doc.setFont("helvetica","bold"); doc.setFontSize(15); doc.text(pdfMoney(p.amount), W-18, y+11, {align:"right"});
+  y+=22;
+  doc.setTextColor(90,90,90); doc.setFont("helvetica","normal"); doc.setFontSize(9);
+  doc.text("Reste dû sur la facture : "+pdfMoney(orderDue(o)), 14, y); y+=10;
+  doc.setDrawColor(180,180,180); doc.line(W-70, y+8, W-18, y+8);
+  doc.setFontSize(8); doc.setTextColor(120,120,120); doc.text("Cachet & signature DISTRIVIA", W-44, y+12, {align:"center"});
+  pdfFooter(doc, "Reçu de versement · DISTRIVIA");
+  return doc;
+}
+function downloadReceiptPDF(o, p){ const doc=pdfPaymentReceipt(o,p); doc.save("recu-"+(o.invoiceNum||o.num||"")+".pdf"); toast("Reçu PDF téléchargé ✓"); }
+
+// REÇU DE DÉPENSE en PDF (avec logo)
+function pdfExpenseReceipt(e){
+  const { jsPDF } = window.jspdf; const doc = new jsPDF({unit:"mm",format:"a5"});
+  const W = doc.internal.pageSize.getWidth();
+  let y = pdfBrandHeader(doc, {title:"REÇU DE DÉPENSE", subtitle:"N° "+(e.id||"")+" · "+frDate(e.date)});
+  y+=4;
+  doc.setDrawColor(225,221,212); doc.setFillColor(250,249,246); doc.roundedRect(14, y, W-28, 36, 2, 2, "FD");
+  doc.setFont("helvetica","normal"); doc.setFontSize(9.5);
+  const rows=[["Libellé", e.label||""],["Catégorie", e.category||""],["Moyen de paiement", e.method||"Espèces"],["Enregistré par", e.by||""]];
+  let ry=y+8; rows.forEach(r=>{ doc.setTextColor(140,140,140); doc.text(r[0], 18, ry); doc.setTextColor(40,40,40); doc.text(String(r[1]).slice(0,40), W-18, ry, {align:"right"}); ry+=7; });
+  y+=42;
+  doc.setFillColor(163,59,59); doc.roundedRect(14, y, W-28, 16, 2, 2, "F");
+  doc.setTextColor(255,255,255); doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.text("MONTANT DÉCAISSÉ", 18, y+6);
+  doc.setFont("helvetica","bold"); doc.setFontSize(15); doc.text(pdfMoney(e.amount), W-18, y+11, {align:"right"});
+  y+=24;
+  doc.setDrawColor(180,180,180); doc.line(W-70, y+8, W-18, y+8);
+  doc.setFontSize(8); doc.setTextColor(120,120,120); doc.text("Signature responsable", W-44, y+12, {align:"center"});
+  pdfFooter(doc, "Reçu de dépense · DISTRIVIA");
+  return doc;
+}
+function downloadExpensePDF(e){ const doc=pdfExpenseReceipt(e); doc.save("depense-"+(e.id||"")+".pdf"); toast("Reçu de dépense PDF téléchargé ✓"); }
+
+/* ============ SESSION DE CAISSE (ouverture / fermeture) ============ */
+// Calcule les mouvements (encaissements/dépenses) entre ouverture et clôture d'une session
+function sessionMovements(openedAt, closedAt){
+  const lo = openedAt, hi = closedAt || (now().replace(" ","T")+":59");
+  const within = ts => { if(!ts) return false; const t=String(ts).replace(" ","T"); return t>=String(lo).replace(" ","T") && t<=String(hi).replace(" ","T"); };
+  // Les versements/dépenses portent une date (jour). On approxime via la date + on inclut tout ce qui a été saisi pendant la session.
+  const ins=[], outs=[];
+  S.orders.forEach(o=>(o.payments||[]).forEach(p=>{ if(within(p.ts)|| (!p.ts && withinDay(p.date,lo,hi))) ins.push({amount:p.amount, method:p.method||"Espèces", label:(o.invoiceNum||o.num)+" — "+clientName(o.clientId), by:p.by, date:p.date}); }));
+  S.expenses.forEach(e=>{ if(within(e.ts) || (!e.ts && withinDay(e.date,lo,hi))) outs.push({amount:e.amount, method:e.method||"Espèces", label:e.label+" ("+e.category+")", by:e.by, date:e.date}); });
+  return {ins, outs};
+}
+function withinDay(d, lo, hi){ if(!d) return false; const loD=String(lo).slice(0,10), hiD=String(hi).slice(0,10); return d>=loD && d<=hiD; }
+function openCashSession(){
+  if(!can("orders_pay")) return toast("Droit insuffisant");
+  if((S.cashSessions||[]).some(s=>!s.closedAt)) return toast("Une session est déjà ouverte");
+  el("confirm").innerHTML = `<div class="modalbg" id="csbg" style="z-index:120"><div class="modal" style="max-width:400px">
+    <h3 style="color:var(--bleu);margin-bottom:8px">Ouvrir la caisse</h3>
+    <p class="muted" style="margin-bottom:10px">Indiquez le fonds de caisse initial (espèces présentes en début de journée).</p>
+    <label>Fonds de caisse initial (FCFA)</label><input id="cs-float" type="number" min="0" value="0">
+    <div class="row" style="justify-content:flex-end;gap:8px;margin-top:16px">
+      <button class="btn ghost" id="cs-cancel">Annuler</button>
+      <button class="btn b" id="cs-ok">Ouvrir la caisse</button>
+    </div></div></div>`;
+  el("cs-cancel").onclick=()=>{ el("confirm").innerHTML=""; };
+  el("csbg").onclick=e=>{ if(e.target.id==="csbg") el("confirm").innerHTML=""; };
+  el("cs-ok").onclick=async ()=>{
+    const float=Math.max(0, Math.round(+el("cs-float").value||0));
+    S.cashSessions.push({ id:nid(), openedAt:now(), openedBy:me().name, openingFloat:float, closedAt:null });
+    log("Caisse ouverte — fonds initial "+fmt(float));
+    el("confirm").innerHTML=""; await save(); render(); toast("Caisse ouverte ✓");
+  };
+}
+function closeCashSession(){
+  if(!can("orders_pay")) return toast("Droit insuffisant");
+  const s=(S.cashSessions||[]).find(x=>!x.closedAt); if(!s) return toast("Aucune session ouverte");
+  const mv=sessionMovements(s.openedAt, null);
+  const totalIn=mv.ins.reduce((a,m)=>a+m.amount,0), totalOut=mv.outs.reduce((a,m)=>a+m.amount,0);
+  const cashIn=mv.ins.filter(m=>m.method==="Espèces").reduce((a,m)=>a+m.amount,0);
+  const cashOut=mv.outs.filter(m=>m.method==="Espèces").reduce((a,m)=>a+m.amount,0);
+  const theoCash=(s.openingFloat||0)+cashIn-cashOut;
+  el("confirm").innerHTML = `<div class="modalbg" id="ccbg" style="z-index:120"><div class="modal" style="max-width:440px">
+    <h3 style="color:var(--rouge);margin-bottom:8px">Fermer la caisse — arrêté</h3>
+    <div style="background:var(--creme);border-radius:8px;padding:10px;font-size:13px;margin-bottom:10px">
+      <div class="row" style="justify-content:space-between"><span>Fonds initial</span><b>${fmt(s.openingFloat||0)}</b></div>
+      <div class="row" style="justify-content:space-between"><span>Encaissements espèces</span><b style="color:var(--vert)">+ ${fmt(cashIn)}</b></div>
+      <div class="row" style="justify-content:space-between"><span>Dépenses espèces</span><b style="color:var(--rouge)">− ${fmt(cashOut)}</b></div>
+      <div class="row" style="justify-content:space-between;border-top:1px solid #ddd;margin-top:4px;padding-top:4px"><span><b>Solde théorique espèces</b></span><b style="color:var(--bleu)">${fmt(theoCash)}</b></div>
+      <div class="row" style="justify-content:space-between;font-size:12px;color:#888;margin-top:4px"><span>Wave / OM / autres encaissements</span><span>${fmt(totalIn-cashIn)}</span></div>
+    </div>
+    <label>Espèces réellement comptées en caisse (FCFA)</label><input id="cc-counted" type="number" min="0" value="${theoCash}">
+    <div id="cc-gap" class="muted" style="font-size:13px;margin-top:6px"></div>
+    <div class="row" style="justify-content:flex-end;gap:8px;margin-top:16px">
+      <button class="btn ghost" id="cc-cancel">Retour</button>
+      <button class="btn" style="background:var(--rouge)" id="cc-ok">Clôturer & générer l'arrêté PDF</button>
+    </div></div></div>`;
+  const counted=el("cc-counted"), gap=el("cc-gap");
+  const showGap=()=>{ const g=(Math.round(+counted.value||0))-theoCash; gap.innerHTML = g===0?'<span style="color:var(--vert)">✓ Caisse juste, aucun écart.</span>':(g>0?'<span style="color:var(--terra)">Excédent de '+fmt(g)+'</span>':'<span style="color:var(--rouge)">Manquant de '+fmt(-g)+'</span>'); };
+  counted.oninput=showGap; showGap();
+  el("cc-cancel").onclick=()=>{ el("confirm").innerHTML=""; };
+  el("ccbg").onclick=e=>{ if(e.target.id==="ccbg") el("confirm").innerHTML=""; };
+  el("cc-ok").onclick=async ()=>{
+    const countedAmount=Math.max(0,Math.round(+counted.value||0));
+    s.closedAt=now(); s.closedBy=me().name; s.openingFloatSnap=s.openingFloat||0;
+    s.totalIn=totalIn; s.totalOut=totalOut; s.cashIn=cashIn; s.cashOut=cashOut;
+    s.expectedCash=theoCash; s.countedAmount=countedAmount; s.gap=countedAmount-theoCash;
+    s.byMethodIn={}; mv.ins.forEach(m=>{ s.byMethodIn[m.method]=(s.byMethodIn[m.method]||0)+m.amount; });
+    log("Caisse fermée — compté "+fmt(countedAmount)+" / théorique "+fmt(theoCash)+" (écart "+fmt(s.gap)+")");
+    el("confirm").innerHTML=""; await save(); render();
+    downloadCashClosingPDF(s);
+    toast("Caisse clôturée ✓ — arrêté PDF généré");
+  };
+}
+window.openCashSession=openCashSession; window.closeCashSession=closeCashSession;
+// ARRÊTÉ DE CAISSE en PDF
+function pdfCashClosing(s){
+  const { jsPDF } = window.jspdf; const doc = new jsPDF({unit:"mm",format:"a4"});
+  const W = doc.internal.pageSize.getWidth();
+  pdfBrandHeader(doc, {title:"ARRÊTÉ DE CAISSE", subtitle:"Session du "+frDateTime(s.openedAt)+" au "+frDateTime(s.closedAt)});
+  let y=56;
+  // méta
+  doc.setFont("helvetica","normal"); doc.setFontSize(9.5); doc.setTextColor(80,80,80);
+  doc.text("Ouverte par : "+(s.openedBy||"—"), 14, y); doc.text("Clôturée par : "+(s.closedBy||"—"), W-14, y, {align:"right"}); y+=10;
+  // tableau synthèse espèces
+  const line=(label,val,color,bold)=>{
+    doc.setFont("helvetica",bold?"bold":"normal"); doc.setTextColor(...(color||[60,60,60]));
+    doc.text(label, 16, y); doc.text(pdfMoney(val), W-16, y, {align:"right"}); y+=7;
+  };
+  doc.setFillColor(15,42,74); doc.rect(14,y-5,W-28,8,"F"); doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(9.5);
+  doc.text("MOUVEMENTS EN ESPÈCES", 16, y); y+=9; doc.setFontSize(10);
+  line("Fonds de caisse initial", s.openingFloatSnap||0);
+  line("(+) Encaissements espèces", s.cashIn||0, [46,107,62]);
+  line("(−) Dépenses espèces", -(s.cashOut||0), [163,59,59]);
+  doc.setDrawColor(200,200,200); doc.line(14,y-2,W-14,y-2);
+  line("= Solde théorique en caisse", s.expectedCash||0, [15,42,74], true);
+  line("Espèces comptées", s.countedAmount||0, [15,42,74], true);
+  // écart encadré
+  y+=2; const g=s.gap||0;
+  doc.setFillColor(g===0?233:(g>0?255:252), g===0?246:(g>0?243:232), g===0?236:(g>0?224:232));
+  doc.roundedRect(14,y,W-28,12,2,2,"F");
+  doc.setTextColor(g===0?46:(g>0?200:163), g===0?107:(g>0?94:59), g===0?62:(g>0?45:59));
+  doc.setFont("helvetica","bold"); doc.setFontSize(11);
+  doc.text(g===0?"ÉCART : aucun — caisse juste":(g>0?"ÉCART : excédent de "+pdfMoney(g):"ÉCART : manquant de "+pdfMoney(-g)), 18, y+8); y+=20;
+  // autres encaissements (Wave/OM)
+  const others=Object.entries(s.byMethodIn||{}).filter(([m])=>m!=="Espèces");
+  if(others.length){
+    doc.setFillColor(15,42,74); doc.rect(14,y-5,W-28,8,"F"); doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(9.5);
+    doc.text("AUTRES ENCAISSEMENTS (hors caisse espèces)", 16, y); y+=9; doc.setFontSize(10);
+    others.forEach(([m,v])=> line(m, v, [60,60,60]));
+    doc.setFont("helvetica","bold"); doc.setTextColor(15,42,74); line("Total encaissé toutes méthodes", s.totalIn||0, [15,42,74], true);
+  }
+  y+=6;
+  // signatures
+  doc.setDrawColor(170,170,170);
+  doc.line(20, y+16, 80, y+16); doc.line(W-80, y+16, W-20, y+16);
+  doc.setFont("helvetica","normal"); doc.setFontSize(8.5); doc.setTextColor(120,120,120);
+  doc.text("Le caissier", 50, y+21, {align:"center"});
+  doc.text("La direction", W-50, y+21, {align:"center"});
+  pdfFooter(doc, "Arrêté de caisse · DISTRIVIA");
+  return doc;
+}
+function downloadCashClosingPDF(s){ const doc=pdfCashClosing(s); doc.save("arrete-caisse-"+String(s.closedAt||"").slice(0,10)+".pdf"); }
+window.downloadCashClosingPDF=downloadCashClosingPDF;
+function showCashHistory(){
+  const closed=(S.cashSessions||[]).filter(s=>s.closedAt).sort((a,b)=>(a.closedAt<b.closedAt?1:-1));
+  openModal(`<div class="row" style="justify-content:space-between"><h3>Historique des sessions de caisse</h3><button class="x" onclick="closeModal()">×</button></div>
+    <div class="tablewrap"><table><tr><th>Ouverture</th><th>Clôture</th><th>Par</th><th class="num">Fonds</th><th class="num">Encaissé</th><th class="num">Compté</th><th class="num">Écart</th><th></th></tr>
+    ${closed.length?closed.map(s=>`<tr><td>${frDateTime(s.openedAt)}</td><td>${frDateTime(s.closedAt)}</td><td class="muted">${esc(s.closedBy||"")}</td>
+      <td class="num">${fmt(s.openingFloatSnap||0)}</td><td class="num" style="color:var(--vert)">${fmt(s.totalIn||0)}</td><td class="num">${fmt(s.countedAmount||0)}</td>
+      <td class="num" style="color:${(s.gap||0)===0?'var(--vert)':(s.gap>0?'var(--terra)':'var(--rouge)')};font-weight:700">${s.gap>0?"+":""}${fmt(s.gap||0)}</td>
+      <td><button class="btn sm ghost" data-cspdf="${s.id}">⬇ Arrêté</button></td></tr>`).join(""):`<tr><td colspan="8" class="empty">Aucune session clôturée.</td></tr>`}
+    </table></div>`);
+  el("modal").querySelectorAll("[data-cspdf]").forEach(b=> b.onclick=()=>{ const s=S.cashSessions.find(x=>x.id===+b.dataset.cspdf); if(s) downloadCashClosingPDF(s); });
+}
+window.showCashHistory=showCashHistory;
+
+
 // Génère un QR code (image data-URL) à partir d'un texte. Vide si la lib n'est pas chargée.
 function qrDataURL(text, cell){
   try{
@@ -1909,6 +2293,7 @@ function tvaDeclarationHTML(from, to){
   </div>`;
 }
 function frDate(d){ if(!d) return ""; const [y,m,j]=d.split("-"); return j+"/"+m+"/"+y; }
+function frDateTime(dt){ if(!dt) return ""; const s=String(dt).replace("T"," "); const [d,h]=s.split(" "); return frDate(d)+(h?" à "+h.slice(0,5):""); }
 function moisAnnee(d){ if(!d) return ""; const mois=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"]; const [y,m]=d.split("-"); return mois[(+m)-1]+" "+y; }
 
 /* ================== EXPORTS ================== */
@@ -2150,43 +2535,267 @@ function vAccounting(){
   const bal = {};
   E.forEach(e=>e.lines.forEach(l=>{ const b=bal[l.account]=bal[l.account]||{d:0,c:0}; b.d+=l.debit; b.c+=l.credit; }));
   const totD = Object.values(bal).reduce((a,b)=>a+b.d,0), totC = Object.values(bal).reduce((a,b)=>a+b.c,0);
+  const accounts = Object.keys(bal).sort();
+  const glAccounts = acctAccount ? accounts.filter(a=>a===acctAccount) : accounts;
+  // mois disponibles pour le closing (du plus récent)
+  const now = new Date(); const curMonth = now.toISOString().slice(0,7);
+  const monthsList = []; for(let i=0;i<24;i++){ const d=new Date(now.getFullYear(), now.getMonth()-i, 1); monthsList.push(d.toISOString().slice(0,7)); }
+  const curYear = now.getFullYear();
+  const yearsList = [curYear, curYear-1, curYear-2];
   return `
   <h2>Comptabilité — SYSCOHADA</h2>
-  <div class="panel"><div class="row" style="align-items:flex-end">
+  <div class="panel"><div class="row" style="align-items:flex-end;flex-wrap:wrap">
     <div><label>Du</label><input type="date" id="ac-from" value="${f||""}"></div>
     <div><label>Au</label><input type="date" id="ac-to" value="${t||""}"></div>
     <button class="btn ghost sm" id="ac-apply">Appliquer la période</button>
-    <button class="btn sm b" id="exp-accounting-xlsx">Export Excel</button>
-    <button class="btn sm ghost" id="exp-accounting-pdf">Export PDF</button>
+    ${(f||t)?`<button class="btn ghost sm" id="ac-clear">Tout</button>`:""}
   </div><p class="muted" style="margin-top:6px">Écritures générées automatiquement depuis les ventes, encaissements, achats et dépenses. Plan de comptes SYSCOHADA simplifié.</p></div>
+
+  <div class="panel" style="border-left:4px solid var(--terra)">
+    <h3 style="margin-bottom:4px">📊 Clôture comptable (closing)</h3>
+    <p class="muted" style="margin-bottom:10px">Générez un dossier de clôture professionnel en PDF : compte de résultat, bilan simplifié, balance et indicateurs clés.</p>
+    <div class="row" style="align-items:flex-end;flex-wrap:wrap;gap:10px">
+      <div><label>Clôture mensuelle</label><select id="cl-month">${monthsList.map(m=>`<option value="${m}">${monthLabelFr(m)}</option>`).join("")}</select></div>
+      <button class="btn b" id="cl-month-go">Générer le closing mensuel (PDF)</button>
+      <div style="width:1px;height:34px;background:#ddd;margin:0 6px"></div>
+      <div><label>Clôture annuelle</label><select id="cl-year">${yearsList.map(y=>`<option value="${y}">Exercice ${y}</option>`).join("")}</select></div>
+      <button class="btn b" id="cl-year-go">Générer le closing annuel (PDF)</button>
+    </div>
+  </div>
 
   ${tvaDeclarationPanel(f,t)}
 
-  <div class="panel"><h3>Journal des écritures (${E.length})</h3><div class="tablewrap"><table>
+  <div class="panel"><div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+    <h3 style="margin:0">Journal des écritures (${E.length})</h3>
+    <div class="row"><button class="btn sm ghost" id="exp-journal-csv">CSV</button><button class="btn sm b" id="exp-journal-pdf">PDF</button></div>
+  </div><div class="tablewrap"><table>
     <tr><th>Date</th><th>Jrnl</th><th>Pièce</th><th>Compte</th><th>Libellé</th><th class="num">Débit</th><th class="num">Crédit</th></tr>
-    ${E.length?E.map(e=>e.lines.map((l,i)=>`<tr><td>${i===0?e.date:""}</td><td>${i===0?'<span class="badge role" style="background:var(--bleu2)">'+e.journal+'</span>':""}</td><td>${i===0?esc(e.num):""}</td>
+    ${E.length?E.map(e=>e.lines.map((l,i)=>`<tr><td>${i===0?frDate(e.date):""}</td><td>${i===0?'<span class="badge role" style="background:var(--bleu2)">'+e.journal+'</span>':""}</td><td>${i===0?esc(e.num):""}</td>
       <td><b>${l.account}</b> ${esc(accName(l.account))}</td><td class="muted">${esc(l.label)}</td>
       <td class="num">${l.debit?fmt(l.debit):""}</td><td class="num">${l.credit?fmt(l.credit):""}</td></tr>`).join("")).join("")
       :`<tr><td colspan="7" class="empty">Aucune écriture sur la période.</td></tr>`}
   </table></div></div>
 
-  <div class="panel"><h3>Balance générale</h3><div class="tablewrap"><table>
+  <div class="panel"><div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+    <h3 style="margin:0">Balance générale</h3>
+    <div class="row"><button class="btn sm ghost" id="exp-balance-csv">CSV</button><button class="btn sm b" id="exp-balance-pdf">PDF</button></div>
+  </div><div class="tablewrap"><table>
     <tr><th>Compte</th><th>Intitulé</th><th class="num">Débit</th><th class="num">Crédit</th><th class="num">Solde</th></tr>
-    ${Object.keys(bal).sort().map(code=>{const b=bal[code];const solde=b.d-b.c;
+    ${accounts.map(code=>{const b=bal[code];const solde=b.d-b.c;
       return `<tr><td><b>${code}</b></td><td>${esc(accName(code))}</td><td class="num">${fmt(b.d)}</td><td class="num">${fmt(b.c)}</td>
       <td class="num" style="color:${solde>=0?'var(--bleu)':'var(--terra)'}">${fmt(Math.abs(solde))} ${solde>=0?"D":"C"}</td></tr>`;}).join("")}
     <tr style="font-weight:800;background:var(--creme)"><td colspan="2">TOTAUX</td><td class="num">${fmt(totD)}</td><td class="num">${fmt(totC)}</td><td class="num">${totD===totC?'<span class="badge ok">équilibrée</span>':'<span class="badge alert">déséquilibre</span>'}</td></tr>
   </table></div></div>
 
-  <div class="panel"><h3>Grand-livre par compte</h3>
-    ${Object.keys(bal).sort().map(code=>{const lignes=[]; E.forEach(e=>e.lines.forEach(l=>{if(l.account===code)lignes.push({date:e.date,num:e.num,label:l.label,d:l.debit,c:l.credit});}));
+  <div class="panel"><div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+    <h3 style="margin:0">Grand-livre par compte</h3>
+    <div class="row" style="align-items:flex-end">
+      <div><label style="margin:0;font-size:11px">Filtrer un compte</label>
+        <select id="gl-account"><option value="">Tous les comptes</option>${accounts.map(a=>`<option value="${a}" ${acctAccount===a?"selected":""}>${a} — ${esc(accName(a))}</option>`).join("")}</select></div>
+      <button class="btn sm ghost" id="exp-gl-csv">CSV</button><button class="btn sm b" id="exp-gl-pdf">PDF</button>
+    </div>
+  </div>
+    ${glAccounts.map(code=>{const lignes=[]; E.forEach(e=>e.lines.forEach(l=>{if(l.account===code)lignes.push({date:e.date,num:e.num,label:l.label,d:l.debit,c:l.credit});}));
       let solde=0;
       return `<div style="margin-bottom:10px"><div style="font-weight:700;color:var(--bleu)">${code} — ${esc(accName(code))}</div>
       <div class="tablewrap"><table><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th class="num">Débit</th><th class="num">Crédit</th><th class="num">Solde</th></tr>
-      ${lignes.map(l=>{solde+=l.d-l.c;return `<tr><td>${l.date}</td><td>${esc(l.num)}</td><td class="muted">${esc(l.label)}</td><td class="num">${l.d?fmt(l.d):""}</td><td class="num">${l.c?fmt(l.c):""}</td><td class="num">${fmt(Math.abs(solde))} ${solde>=0?"D":"C"}</td></tr>`;}).join("")}
+      ${lignes.map(l=>{solde+=l.d-l.c;return `<tr><td>${frDate(l.date)}</td><td>${esc(l.num)}</td><td class="muted">${esc(l.label)}</td><td class="num">${l.d?fmt(l.d):""}</td><td class="num">${l.c?fmt(l.c):""}</td><td class="num">${fmt(Math.abs(solde))} ${solde>=0?"D":"C"}</td></tr>`;}).join("")}
       </table></div></div>`;}).join("")}
   </div>`;
 }
+function monthLabelFr(m){ const [y,mo]=m.split("-"); const names=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"]; return names[+mo-1]+" "+y; }
+
+/* ============ EXPORTS COMPTABLES (Point 3) ============ */
+function csvDownload(filename, rows){
+  const csv = rows.map(r=>r.map(c=>`"${String(c==null?"":c).replace(/"/g,'""')}"`).join(";")).join("\n");
+  const blob = new Blob(["\ufeff"+csv], {type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=filename; a.click();
+  toast("Export CSV téléchargé ✓");
+}
+function acctBalance(E){ const bal={}; E.forEach(e=>e.lines.forEach(l=>{ const b=bal[l.account]=bal[l.account]||{d:0,c:0}; b.d+=l.debit; b.c+=l.credit; })); return bal; }
+function periodLabelStr(){ const f=acctFrom(),t=acctTo(); if(f&&t) return "du "+frDate(f)+" au "+frDate(t); if(f) return "depuis le "+frDate(f); if(t) return "jusqu'au "+frDate(t); return "(toutes périodes)"; }
+function exportJournalCSV(){
+  const E=buildEntries(acctFrom(),acctTo());
+  const rows=[["Date","Journal","Pièce","Compte","Intitulé","Libellé","Débit","Crédit"]];
+  E.forEach(e=>e.lines.forEach(l=>rows.push([e.date,e.journal,e.num,l.account,accName(l.account),l.label,l.debit||"",l.credit||""])));
+  csvDownload("journal_"+(acctFrom()||"")+".csv", rows);
+}
+function exportBalanceCSV(){
+  const bal=acctBalance(buildEntries(acctFrom(),acctTo()));
+  const rows=[["Compte","Intitulé","Débit","Crédit","Solde","Sens"]];
+  Object.keys(bal).sort().forEach(c=>{const b=bal[c];const s=b.d-b.c;rows.push([c,accName(c),b.d,b.c,Math.abs(s),s>=0?"D":"C"]);});
+  csvDownload("balance_"+(acctFrom()||"")+".csv", rows);
+}
+function exportGrandLivreCSV(){
+  const E=buildEntries(acctFrom(),acctTo()); const bal=acctBalance(E);
+  const accounts=acctAccount?[acctAccount]:Object.keys(bal).sort();
+  const rows=[["Compte","Intitulé","Date","Pièce","Libellé","Débit","Crédit","Solde"]];
+  accounts.forEach(code=>{ let solde=0; E.forEach(e=>e.lines.forEach(l=>{ if(l.account===code){ solde+=l.debit-l.credit; rows.push([code,accName(code),e.date,e.num,l.label,l.debit||"",l.credit||"",Math.abs(solde)+" "+(solde>=0?"D":"C")]); }})); });
+  csvDownload("grand_livre_"+(acctAccount||"tous")+".csv", rows);
+}
+// PDF générique pour journal / balance / grand-livre
+function pdfAccountingDoc(title, head, body, opts){
+  opts=opts||{};
+  const { jsPDF } = window.jspdf; const doc = new jsPDF({orientation:opts.landscape?"landscape":"portrait",unit:"mm",format:"a4"});
+  const W=doc.internal.pageSize.getWidth();
+  pdfBrandHeader(doc, {title:title, subtitle:periodLabelStr()});
+  let y=54;
+  const colW = opts.colW || head.map(()=> (W-28)/head.length);
+  const startX=14;
+  doc.setFillColor(15,42,74); doc.rect(startX,y-5,W-28,7,"F");
+  doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(8);
+  let x=startX; head.forEach((h,i)=>{ const al=opts.align&&opts.align[i]==="r"; doc.text(String(h), al?x+colW[i]-2:x+1.5, y, {align:al?"right":"left"}); x+=colW[i]; });
+  y+=6; doc.setTextColor(40,40,40); doc.setFont("helvetica","normal"); doc.setFontSize(7.6);
+  body.forEach((r,ri)=>{
+    if(y>(opts.landscape?195:282)){ doc.addPage(); y=20; }
+    if(ri%2){ doc.setFillColor(245,241,232); doc.rect(startX,y-3.6,W-28,5.2,"F"); }
+    if(r.__bold){ doc.setFont("helvetica","bold"); } else { doc.setFont("helvetica","normal"); }
+    x=startX; (r.cells||r).forEach((c,i)=>{ const al=opts.align&&opts.align[i]==="r"; doc.text(String(c==null?"":c).slice(0,opts.maxChars||40), al?x+colW[i]-2:x+1.5, y, {align:al?"right":"left"}); x+=colW[i]; });
+    y+=5.2;
+  });
+  pdfFooter(doc, title+" · DISTRIVIA");
+  return doc;
+}
+function exportJournalPDF(){
+  const E=buildEntries(acctFrom(),acctTo());
+  const body=[]; E.forEach(e=>e.lines.forEach((l,i)=>body.push([i===0?frDate(e.date):"",i===0?e.journal:"",i===0?e.num:"",l.account,accName(l.account),l.label,l.debit?pdfMoney(l.debit):"",l.credit?pdfMoney(l.credit):""])));
+  const doc=pdfAccountingDoc("Journal des écritures", ["Date","Jrl","Pièce","Cpt","Intitulé","Libellé","Débit","Crédit"], body,
+    {landscape:true, colW:[20,12,26,16,52,85,33,33], align:["l","l","l","l","l","l","r","r"], maxChars:46});
+  doc.save("journal_"+(acctFrom()||"")+".pdf"); toast("Journal PDF téléchargé ✓");
+}
+function exportBalancePDF(){
+  const bal=acctBalance(buildEntries(acctFrom(),acctTo()));
+  let totD=0,totC=0; const body=Object.keys(bal).sort().map(c=>{const b=bal[c];const s=b.d-b.c;totD+=b.d;totC+=b.c;return [c,accName(c),pdfMoney(b.d),pdfMoney(b.c),pdfMoney(Math.abs(s))+" "+(s>=0?"D":"C")];});
+  body.push({cells:["","TOTAUX",pdfMoney(totD),pdfMoney(totC),totD===totC?"équilibrée":"déséquilibre"],__bold:true});
+  const doc=pdfAccountingDoc("Balance générale", ["Compte","Intitulé","Débit","Crédit","Solde"], body,
+    {colW:[24,72,32,32,34], align:["l","l","r","r","r"], maxChars:48});
+  doc.save("balance_"+(acctFrom()||"")+".pdf"); toast("Balance PDF téléchargée ✓");
+}
+function exportGrandLivrePDF(){
+  const E=buildEntries(acctFrom(),acctTo()); const bal=acctBalance(E);
+  const accounts=acctAccount?[acctAccount]:Object.keys(bal).sort();
+  const body=[];
+  accounts.forEach(code=>{ let solde=0;
+    body.push({cells:[code+" — "+accName(code),"","","","",""],__bold:true});
+    E.forEach(e=>e.lines.forEach(l=>{ if(l.account===code){ solde+=l.debit-l.credit; body.push(["",frDate(e.date),e.num,l.label,l.debit?pdfMoney(l.debit):"",l.credit?pdfMoney(l.credit):"",pdfMoney(Math.abs(solde))+" "+(solde>=0?"D":"C")]); }}));
+  });
+  const doc=pdfAccountingDoc("Grand-livre"+(acctAccount?" — compte "+acctAccount:""), ["Compte","Date","Pièce","Libellé","Débit","Crédit","Solde"], body,
+    {landscape:true, colW:[16,20,26,96,33,33,45], align:["l","l","l","l","r","r","r"], maxChars:60});
+  doc.save("grand_livre_"+(acctAccount||"tous")+".pdf"); toast("Grand-livre PDF téléchargé ✓");
+}
+
+/* ============ CLÔTURE COMPTABLE — CLOSING PDF (Point 4) ============ */
+// Agrège produits/charges/trésorerie/créances pour une plage de dates
+function closingData(from, to){
+  const E=buildEntries(from,to); const bal=acctBalance(E);
+  const sumClass = pref => Object.keys(bal).filter(c=>c.startsWith(pref)).reduce((a,c)=>a+(bal[c].c-bal[c].d),0); // produits = crédit
+  const sumClassD = pref => Object.keys(bal).filter(c=>c.startsWith(pref)).reduce((a,c)=>a+(bal[c].d-bal[c].c),0); // charges = débit
+  const inR=d=>(!from||d>=from)&&(!to||d<=to);
+  const live=S.orders.filter(o=>o.status!=="cancelled"&&o.delivered&&inR(o.date));
+  const ca=live.reduce((a,o)=>a+orderTotal(o),0);
+  const cogs=live.reduce((a,o)=>a+(typeof orderCost==="function"?orderCost(o):0),0);
+  const ventesHT=live.reduce((a,o)=>a+(orderTotal(o)-orderTVA(o)),0);
+  let encaisse=0; S.orders.forEach(o=>(o.payments||[]).forEach(p=>{ if(inR(p.date)) encaisse+=p.amount; }));
+  const depenses=S.expenses.filter(e=>inR(e.date)).reduce((a,e)=>a+e.amount,0);
+  // charges par catégorie
+  const chargesByCat={}; S.expenses.filter(e=>inR(e.date)).forEach(e=>{ chargesByCat[e.category||"Autre"]=(chargesByCat[e.category||"Autre"]||0)+e.amount; });
+  // achats marchandises
+  const achats=(S.purchases||[]).filter(p=>inR(p.date||p.created||"")).reduce((a,p)=>a+(p.amount||0),0);
+  const creances=S.orders.filter(o=>o.status!=="cancelled"&&o.invoiceNum&&orderDue(o)>0).reduce((a,o)=>a+orderDue(o),0);
+  const tva=live.reduce((a,o)=>a+orderTVA(o),0);
+  const resultat=ventesHT - cogs - depenses;
+  return {ca,ventesHT,cogs,encaisse,depenses,chargesByCat,achats,creances,tva,resultat,nbOrders:live.length,nbClients:S.clients.length};
+}
+function pdfClosing(from, to, kind, label){
+  const d=closingData(from,to);
+  const { jsPDF } = window.jspdf; const doc=new jsPDF({unit:"mm",format:"a4"});
+  const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight();
+  // ---- PAGE DE GARDE ----
+  doc.setFillColor(15,42,74); doc.rect(0,0,W,H,"F");
+  doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(34); doc.text("DISTRIVIA", W/2, 95, {align:"center"});
+  doc.setFillColor(200,94,45); doc.rect(W/2-30,101,60,2.5,"F");
+  doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(200,210,225); doc.text("DISTRIBUTION GROUP", W/2, 110, {align:"center"});
+  doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(22);
+  doc.text(kind==="year"?"DOSSIER DE CLÔTURE ANNUELLE":"CLÔTURE MENSUELLE", W/2, 150, {align:"center"});
+  doc.setFontSize(15); doc.setTextColor(220,228,238); doc.text(label, W/2, 163, {align:"center"});
+  doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(170,185,205);
+  doc.text("Document comptable établi le "+frDate(today()), W/2, H-40, {align:"center"});
+  doc.text("SYSCOHADA révisé · Présentation simplifiée", W/2, H-34, {align:"center"});
+  // ---- PAGE 2 : COMPTE DE RÉSULTAT ----
+  doc.addPage(); let y=pdfBrandHeader(doc,{title:"Compte de résultat",subtitle:label})+6;
+  const row=(lbl,val,opt)=>{ opt=opt||{}; doc.setFont("helvetica",opt.bold?"bold":"normal"); doc.setFontSize(opt.big?11:9.8); doc.setTextColor(...(opt.color||[55,55,55]));
+    if(opt.fill){ doc.setFillColor(...opt.fill); doc.rect(14,y-4.5,W-28,7.5,"F"); }
+    doc.text(lbl,18,y); doc.text(pdfMoney(val),W-18,y,{align:"right"}); y+=opt.big?9:6.6; };
+  doc.setDrawColor(220,220,220);
+  row("PRODUITS D'EXPLOITATION","",{bold:true,color:[15,42,74]});
+  row("Ventes de marchandises (HT)", d.ventesHT);
+  row("Total produits", d.ventesHT, {bold:true, fill:[245,241,232]});
+  y+=3;
+  row("CHARGES D'EXPLOITATION","",{bold:true,color:[15,42,74]});
+  row("Coût d'achat des marchandises vendues", d.cogs);
+  Object.entries(d.chargesByCat).forEach(([c,v])=> row("  "+c, v));
+  const totCharges=d.cogs+d.depenses;
+  row("Total charges", totCharges, {bold:true, fill:[245,241,232]});
+  y+=4;
+  const rcol = d.resultat>=0?[46,107,62]:[163,59,59];
+  row(d.resultat>=0?"RÉSULTAT NET (bénéfice)":"RÉSULTAT NET (perte)", d.resultat, {bold:true, big:true, color:[255,255,255], fill:rcol});
+  y+=4;
+  doc.setFont("helvetica","italic"); doc.setFontSize(8.5); doc.setTextColor(130,130,130);
+  doc.text("Taux de marge brute : "+(d.ventesHT?Math.round((d.ventesHT-d.cogs)/d.ventesHT*100):0)+"%  ·  Nombre de commandes livrées : "+d.nbOrders, 18, y); y+=10;
+  // ---- INDICATEURS CLÉS ----
+  doc.setFillColor(15,42,74); doc.rect(14,y-4.5,W-28,7.5,"F"); doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(10);
+  doc.text("INDICATEURS CLÉS",18,y); y+=10;
+  const kpis=[["Chiffre d'affaires TTC",pdfMoney(d.ca)],["Encaissements de la période",pdfMoney(d.encaisse)],["Créances clients (restant dû)",pdfMoney(d.creances)],["TVA collectée",pdfMoney(d.tva)],["Dépenses de fonctionnement",pdfMoney(d.depenses)],["Base clientèle",String(d.nbClients)]];
+  const cardW=(W-28-8)/2; let cx=14, cy=y;
+  kpis.forEach((k,i)=>{ const col=i%2; const px=14+col*(cardW+8); if(col===0&&i>0) cy+=20;
+    doc.setDrawColor(225,221,212); doc.setFillColor(250,249,246); doc.roundedRect(px,cy,cardW,17,2,2,"FD");
+    doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(130,130,130); doc.text(k[0],px+4,cy+6);
+    doc.setFont("helvetica","bold"); doc.setFontSize(12.5); doc.setTextColor(15,42,74); doc.text(k[1],px+4,cy+13);
+  });
+  y=cy+26;
+  // ---- PAGE 3 : BILAN SIMPLIFIÉ + BALANCE ----
+  doc.addPage(); y=pdfBrandHeader(doc,{title:"Bilan simplifié & balance",subtitle:label})+6;
+  doc.setFont("helvetica","bold"); doc.setFontSize(10); doc.setTextColor(15,42,74); doc.text("BILAN SIMPLIFIÉ (estimation)",18,y); y+=8;
+  doc.setFontSize(9.5);
+  // Actif
+  doc.setFont("helvetica","bold"); doc.setTextColor(60,60,60); doc.text("ACTIF",18,y); doc.text("PASSIF",W/2+4,y); y+=6;
+  const stock=(S.products||[]).reduce((a,p)=>a+(p.stock*(p.cost||0)),0);
+  const actif=[["Stocks de marchandises",stock],["Créances clients",d.creances],["Trésorerie (encaissé période)",d.encaisse]];
+  const passif=[["Résultat de la période",d.resultat],["Dettes fournisseurs (achats)",d.achats],["TVA à reverser",d.tva]];
+  const yStart=y; doc.setFont("helvetica","normal"); doc.setTextColor(55,55,55);
+  actif.forEach(a=>{ doc.text(a[0],18,y); doc.text(pdfMoney(a[1]),W/2-6,y,{align:"right"}); y+=6; });
+  const totActif=actif.reduce((s,a)=>s+a[1],0);
+  doc.setFont("helvetica","bold"); doc.text("Total actif",18,y); doc.text(pdfMoney(totActif),W/2-6,y,{align:"right"});
+  let y2=yStart; doc.setFont("helvetica","normal");
+  passif.forEach(a=>{ doc.text(a[0],W/2+4,y2); doc.text(pdfMoney(a[1]),W-18,y2,{align:"right"}); y2+=6; });
+  const totPassif=passif.reduce((s,a)=>s+a[1],0);
+  doc.setFont("helvetica","bold"); doc.text("Total passif",W/2+4,y2); doc.text(pdfMoney(totPassif),W-18,y2,{align:"right"});
+  y=Math.max(y,y2)+12;
+  // Balance résumée
+  const bal=acctBalance(buildEntries(from,to)); const accounts=Object.keys(bal).sort();
+  doc.setFillColor(15,42,74); doc.rect(14,y-4.5,W-28,7.5,"F"); doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(9.5);
+  doc.text("BALANCE GÉNÉRALE",18,y); y+=8;
+  doc.setFontSize(8); doc.setTextColor(40,40,40);
+  doc.setFont("helvetica","bold"); doc.text("Compte",18,y); doc.text("Intitulé",36,y); doc.text("Débit",W-70,y,{align:"right"}); doc.text("Crédit",W-44,y,{align:"right"}); doc.text("Solde",W-18,y,{align:"right"}); y+=5;
+  doc.setFont("helvetica","normal"); let tD=0,tC=0;
+  accounts.forEach((c,ri)=>{ if(y>270){doc.addPage();y=20;} const b=bal[c];const s=b.d-b.c;tD+=b.d;tC+=b.c;
+    if(ri%2){ doc.setFillColor(245,241,232); doc.rect(14,y-3.4,W-28,5,"F"); }
+    doc.text(c,18,y); doc.text(accName(c).slice(0,40),36,y); doc.text(pdfMoney(b.d),W-70,y,{align:"right"}); doc.text(pdfMoney(b.c),W-44,y,{align:"right"}); doc.text(pdfMoney(Math.abs(s))+" "+(s>=0?"D":"C"),W-18,y,{align:"right"}); y+=5; });
+  doc.setFont("helvetica","bold"); doc.setFillColor(235,230,220); doc.rect(14,y-3.4,W-28,5.5,"F");
+  doc.text("TOTAUX",18,y); doc.text(pdfMoney(tD),W-70,y,{align:"right"}); doc.text(pdfMoney(tC),W-44,y,{align:"right"}); doc.text(tD===tC?"équilibrée":"déséquilibre",W-18,y,{align:"right"});
+  // footers sur toutes les pages
+  const pages=doc.internal.getNumberOfPages();
+  for(let i=2;i<=pages;i++){ doc.setPage(i); pdfFooter(doc, (kind==="year"?"Clôture annuelle ":"Clôture mensuelle ")+label+" · DISTRIVIA"); }
+  return doc;
+}
+function downloadMonthlyClosing(month){
+  const from=month+"-01"; const [y,m]=month.split("-").map(Number); const last=new Date(y,m,0).getDate(); const to=month+"-"+String(last).padStart(2,"0");
+  const doc=pdfClosing(from,to,"month",monthLabelFr(month)); doc.save("cloture_"+month+".pdf"); toast("Closing mensuel généré ✓");
+}
+function downloadAnnualClosing(year){
+  const doc=pdfClosing(year+"-01-01", year+"-12-31","year","Exercice "+year); doc.save("cloture_annuelle_"+year+".pdf"); toast("Closing annuel généré ✓");
+}
+window.downloadMonthlyClosing=downloadMonthlyClosing; window.downloadAnnualClosing=downloadAnnualClosing;
 
 /* ================== CONTRÔLE DE GESTION ================== */
 // Agrège les réalisations d'un mois donné ("YYYY-MM")
@@ -2888,18 +3497,7 @@ function bindApp(){
   // Modifier une commande
   document.querySelectorAll("[data-oedit]").forEach(b=> b.onclick = ()=>{ startEditOrder(+b.dataset.oedit); });
   // Annuler une commande
-  document.querySelectorAll("[data-ocancel]").forEach(b=> b.onclick = async ()=>{
-    if(!can("orders_cancel")) return toast("Droit insuffisant");
-    const o=S.orders.find(o=>o.id===+b.dataset.ocancel);
-    const reason = prompt("Motif de l'annulation de "+o.num+" :", "erreur de saisie");
-    if(reason===null) return;
-    if(orderPaid(o)>0 && !confirm("Cette commande a reçu "+fmt(orderPaid(o))+" de versements. Annuler quand même ? (les versements resteront tracés)")) return;
-    // Si livrée, on remet le stock
-    if(o.delivered){ o.lines.forEach(l=>{ const p=S.products.find(p=>p.id===l.productId); if(p) p.stock+=l.qty; }); }
-    o.status="cancelled"; o.delivered=false; o.cancelReason=reason; o.cancelledBy=me().name; o.cancelledAt=now();
-    log("Commande ANNULÉE : "+o.num+" — "+reason);
-    await save(); render(); toast("Commande "+o.num+" annulée");
-  });
+  document.querySelectorAll("[data-ocancel]").forEach(b=> b.onclick = ()=> cancelOrderWithReason(+b.dataset.ocancel));
   // Reçu de commande
   document.querySelectorAll("[data-oreceipt]").forEach(b=> b.onclick = ()=>{
     const o=S.orders.find(o=>o.id===+b.dataset.oreceipt);
@@ -2937,7 +3535,7 @@ function bindApp(){
     const method = el("v-method")?el("v-method").value:"Espèces";
     const date = el("v-date").value||today();
     confirmAction({title:"Confirmer l'encaissement", message:`Encaisser <b>${fmt(amount)}</b> sur la facture <b>${esc(o.invoiceNum)}</b> (${esc(clientName(o.clientId))}) par <b>${esc(method)}</b> ?${amount>=due?"<br><br>✓ La facture sera soldée.":"<br><br>Reste après : "+fmt(due-amount)}`, okLabel:"Oui, encaisser"}, async ()=>{
-      o.payments.push({id:nid(), date, amount, method, by:me().name});
+      o.payments.push({id:nid(), date, amount, method, by:me().name, ts:now()});
       refreshStatus(o);
       log("Versement encaissé : "+o.invoiceNum+" — "+fmt(amount)+(orderDue(o)>0?" (reste "+fmt(orderDue(o))+")":" (soldée)"));
       await save(); render(); toast("Versement de "+fmt(amount)+" enregistré ✓");
@@ -2952,7 +3550,7 @@ function bindApp(){
   if(eAdd) eAdd.onclick = async ()=>{
     const label=el("e-label").value.trim(), amount=+el("e-amount").value;
     if(!label||!amount) return toast("Libellé et montant requis");
-    S.expenses.push({ id:nid(), label, category:el("e-cat").value, amount, method:(el("e-method")?el("e-method").value:"Espèces"), date:el("e-date").value||today(), by:me().name });
+    S.expenses.push({ id:nid(), label, category:el("e-cat").value, amount, method:(el("e-method")?el("e-method").value:"Espèces"), date:el("e-date").value||today(), by:me().name, ts:now() });
     log("Dépense : "+label+" — "+fmt(amount));
     await save(); render(); toast("Dépense enregistrée ✓");
   };
@@ -2969,17 +3567,23 @@ function bindApp(){
     if(!o||!p) return;
     openModal(`<div class="row" style="justify-content:space-between"><h3>Reçu de paiement</h3><button class="x" onclick="closeModal()">×</button></div>
       <div style="border:1px solid #eee;border-radius:8px;padding:10px">${paymentReceiptHTML(o,p)}</div>
-      <div class="row" style="margin-top:12px"><button class="btn" id="rc-print">Imprimer / PDF</button><button class="btn ghost" onclick="closeModal()">Fermer</button></div>`);
+      <div class="row" style="margin-top:12px"><button class="btn b" id="rc-pdf">⬇ Télécharger PDF</button><button class="btn ghost" id="rc-print">Imprimer</button><button class="btn ghost" onclick="closeModal()">Fermer</button></div>`);
     el("rc-print").onclick = ()=> printHTML(paymentReceiptHTML(o,p));
+    el("rc-pdf").onclick = ()=> downloadReceiptPDF(o,p);
   });
   // Reçu de dépense
   document.querySelectorAll("[data-ereceipt]").forEach(b=> b.onclick = ()=>{
     const e=S.expenses.find(e=>e.id===+b.dataset.ereceipt); if(!e) return;
     openModal(`<div class="row" style="justify-content:space-between"><h3>Pièce de dépense</h3><button class="x" onclick="closeModal()">×</button></div>
       <div style="border:1px solid #eee;border-radius:8px;padding:10px">${expenseReceiptHTML(e)}</div>
-      <div class="row" style="margin-top:12px"><button class="btn" id="rc-print">Imprimer / PDF</button><button class="btn ghost" onclick="closeModal()">Fermer</button></div>`);
+      <div class="row" style="margin-top:12px"><button class="btn b" id="rc-pdf">⬇ Télécharger PDF</button><button class="btn ghost" id="rc-print">Imprimer</button><button class="btn ghost" onclick="closeModal()">Fermer</button></div>`);
     el("rc-print").onclick = ()=> printHTML(expenseReceiptHTML(e));
+    el("rc-pdf").onclick = ()=> downloadExpensePDF(e);
   });
+  // Session de caisse : ouverture / fermeture / historique
+  const cashOpen=el("cash-open"); if(cashOpen) cashOpen.onclick=openCashSession;
+  const cashClose=el("cash-close"); if(cashClose) cashClose.onclick=closeCashSession;
+  const cashHist=el("cash-history"); if(cashHist) cashHist.onclick=showCashHistory;
   // Filtre période caisse (affichage)
   const cashApply = el("cash-apply");
   if(cashApply) cashApply.onclick = ()=>{ cashPeriod={from:el("cash-from").value, to:el("cash-to").value}; render(); };
@@ -3077,8 +3681,21 @@ function bindApp(){
   // ===== Périodes Comptabilité / Contrôle =====
   const acApply = el("ac-apply");
   if(acApply) acApply.onclick = ()=>{ acctPeriod={from:el("ac-from").value, to:el("ac-to").value}; render(); };
+  const acClear = el("ac-clear");
+  if(acClear) acClear.onclick = ()=>{ acctPeriod={from:"",to:""}; render(); };
   const tvaPdf = el("tva-pdf");
   if(tvaPdf) tvaPdf.onclick = ()=> printHTML(tvaDeclarationHTML(acctFrom(), acctTo()));
+  // Filtre grand-livre par compte
+  const glAcc = el("gl-account");
+  if(glAcc) glAcc.onchange = ()=>{ acctAccount=glAcc.value; render(); };
+  // Exports comptables séparés (Point 3)
+  const bindBtn=(id,fn)=>{ const b=el(id); if(b) b.onclick=fn; };
+  bindBtn("exp-journal-csv", exportJournalCSV); bindBtn("exp-journal-pdf", exportJournalPDF);
+  bindBtn("exp-balance-csv", exportBalanceCSV); bindBtn("exp-balance-pdf", exportBalancePDF);
+  bindBtn("exp-gl-csv", exportGrandLivreCSV); bindBtn("exp-gl-pdf", exportGrandLivrePDF);
+  // Closing (Point 4)
+  bindBtn("cl-month-go", ()=>{ const m=el("cl-month").value; downloadMonthlyClosing(m); });
+  bindBtn("cl-year-go", ()=>{ const y=el("cl-year").value; downloadAnnualClosing(+y); });
   const ctApply = el("ct-apply");
   if(ctApply) ctApply.onclick = ()=>{ ctrlPeriod={from:el("ct-from").value, to:el("ct-to").value}; render(); };
 
