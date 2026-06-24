@@ -2,10 +2,15 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>DISTRIVIA Gestion</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230F2A4A'/%3E%3Ctext x='32' y='42' font-family='Arial,sans-serif' font-size='34' font-weight='bold' fill='white' text-anchor='middle'%3ED%3C/text%3E%3Crect x='20' y='48' width='24' height='4' fill='%23C85E2D'/%3E%3C/svg%3E">
-<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230F2A4A'/%3E%3Ctext x='32' y='42' font-family='Arial' font-size='34' font-weight='bold' fill='white' text-anchor='middle'%3ED%3C/text%3E%3Crect x='20' y='48' width='24' height='4' fill='%23C85E2D'/%3E%3C/svg%3E">
+<meta name="theme-color" content="#0F2A4A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Gestion">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23C85E2D'/%3E%3Ctext x='32' y='42' font-family='Arial,sans-serif' font-size='34' font-weight='bold' fill='%23F5F1E8' text-anchor='middle'%3ED%3C/text%3E%3Crect x='20' y='48' width='24' height='4' fill='%230F2A4A'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="icon-gestion-192.png">
 <style>
   :root{
     --bleu:#0F2A4A; --bleu2:#1B3D63; --terra:#C85E2D; --creme:#F5F1E8;
@@ -584,6 +589,25 @@ function migrate(){
   if (!S.announcements) S.announcements = [];
   if (!S.promos) S.promos = [];
   if (!S.cashSessions) S.cashSessions = []; // sessions de caisse (ouverture/fermeture)
+  // Coordonnées entreprise éditables (partagées Gestion + Portail)
+  if (!S.settings.company) S.settings.company = {};
+  const co = S.settings.company;
+  if (co.name === undefined) co.name = "DISTRIVIA";
+  if (co.tagline === undefined) co.tagline = "DISTRIBUTION GROUP";
+  if (co.slogan === undefined) co.slogan = "Le premier réseau de distribution de consommables jetables et durables au Sénégal.";
+  if (co.phone1 === undefined) co.phone1 = "+221 77 527 82 24";
+  if (co.phone2 === undefined) co.phone2 = "+221 77 764 88 24";
+  if (co.whatsapp === undefined) co.whatsapp = "221775278224";
+  if (co.email === undefined) co.email = "contact@distrivia.sn";
+  if (co.address === undefined) co.address = "Dakar, Sénégal";
+  if (co.website === undefined) co.website = "distrivia.sn";
+  if (co.hours === undefined) co.hours = "Lundi – Samedi : 8h – 19h";
+  if (co.hours2 === undefined) co.hours2 = "Livraison 48 h sur Dakar";
+  if (co.hours3 === undefined) co.hours3 = "Commande WhatsApp 7j/7";
+  if (co.logo === undefined) co.logo = ""; // dataURL optionnel
+  // synchronise NINEA/RCCM dans company aussi (pour le portail)
+  if (co.ninea === undefined) co.ninea = S.settings.ninea||"";
+  if (co.rccm === undefined) co.rccm = S.settings.rccm||"";
   (S.clients||[]).forEach(c=>{ if(c.points===undefined) c.points=0; if(!c.matricule){ c.matricule="CLI-"+String(S.clientSeq++).padStart(4,"0"); } });
 }
 
@@ -701,6 +725,7 @@ function chrome(content){
     ["hr","Ressources humaines",can("hr")],
     ["monitoring","Monitoring",can("monitoring")],
     ["users","Utilisateurs",isAdmin()],
+    ["settings","Paramètres",isAdmin()],
     ["backup","Sauvegarde",isAdmin()],
   ];
   return `
@@ -1350,6 +1375,81 @@ function vUsers(){
   </table></div></div>`;
 }
 
+/* ================== ONGLET PARAMÈTRES (admin) ================== */
+function vSettings(){
+  const co = (S.settings && S.settings.company) || {};
+  return `
+  <h2>Paramètres</h2>
+  <div class="infobox" style="margin-bottom:14px">⚙️ Les coordonnées ci-dessous s'appliquent <b>automatiquement à Gestion ET au portail</b> (factures, reçus, en-têtes PDF, pied de page du portail…). Modifiez-les ici, sans toucher au code.</div>
+
+  <div class="panel">
+    <h3 style="margin-bottom:4px">🏢 Identité de l'entreprise</h3>
+    <p class="muted" style="margin-bottom:12px">Nom affiché, slogan et logo. Le logo apparaît sur les documents et peut s'afficher sur le portail.</p>
+    <div class="grid2">
+      <div><label>Nom du site / entreprise</label><input id="co-name" value="${esc(co.name||"")}" placeholder="DISTRIVIA"></div>
+      <div><label>Sous-titre (sous le nom)</label><input id="co-tagline" value="${esc(co.tagline||"")}" placeholder="DISTRIBUTION GROUP"></div>
+    </div>
+    <div style="margin-top:8px"><label>Slogan / description (portail, pied de page)</label><input id="co-slogan" value="${esc(co.slogan||"")}" placeholder="Le premier réseau de distribution…"></div>
+    <div style="margin-top:10px"><label>Logo (optionnel)</label>
+      <div class="row" style="align-items:center;gap:12px">
+        <div id="co-logo-preview" style="width:64px;height:64px;border-radius:10px;border:1px solid #eee;background:var(--creme);display:flex;align-items:center;justify-content:center;overflow:hidden">${co.logo?`<img src="${co.logo}" style="width:100%;height:100%;object-fit:contain">`:'<span style="color:#bbb;font-size:22px">D</span>'}</div>
+        <input type="file" id="co-logo" accept="image/*" style="font-size:13px">
+        ${co.logo?`<button class="btn sm ghost" id="co-logo-remove">Retirer</button>`:""}
+      </div>
+      <span class="muted" style="font-size:12px">Le logo est compressé automatiquement. Format conseillé : PNG carré sur fond transparent.</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3 style="margin-bottom:4px">📞 Coordonnées & contacts</h3>
+    <p class="muted" style="margin-bottom:12px">Utilisées sur les factures, reçus, le portail et le bouton WhatsApp.</p>
+    <div class="grid2">
+      <div><label>Téléphone principal</label><input id="co-phone1" value="${esc(co.phone1||"")}" placeholder="+221 77 …"></div>
+      <div><label>Téléphone secondaire</label><input id="co-phone2" value="${esc(co.phone2||"")}" placeholder="+221 77 …"></div>
+      <div><label>Numéro WhatsApp (chiffres only)</label><input id="co-whatsapp" value="${esc(co.whatsapp||"")}" placeholder="221775278224"></div>
+      <div><label>Email</label><input id="co-email" value="${esc(co.email||"")}" placeholder="contact@distrivia.sn"></div>
+      <div><label>Adresse</label><input id="co-address" value="${esc(co.address||"")}" placeholder="Dakar, Sénégal"></div>
+      <div><label>Site web (affichage)</label><input id="co-website" value="${esc(co.website||"")}" placeholder="distrivia.sn"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3 style="margin-bottom:4px">🕐 Horaires (affichés sur le portail)</h3>
+    <div class="grid2">
+      <div><label>Ligne 1</label><input id="co-hours" value="${esc(co.hours||"")}" placeholder="Lundi – Samedi : 8h – 19h"></div>
+      <div><label>Ligne 2</label><input id="co-hours2" value="${esc(co.hours2||"")}" placeholder="Livraison 48 h sur Dakar"></div>
+      <div><label>Ligne 3</label><input id="co-hours3" value="${esc(co.hours3||"")}" placeholder="Commande WhatsApp 7j/7"></div>
+    </div>
+    <div class="row" style="margin-top:14px"><button class="btn b" id="co-save">💾 Enregistrer les coordonnées</button>
+    <span class="muted">Appliqué immédiatement sur Gestion et le portail.</span></div>
+  </div>
+
+  <div class="panel">
+    <h3>Paramètres fiscaux (TVA)</h3>
+    <p class="muted" style="margin-bottom:10px">Au Sénégal, la TVA standard est de 18 %. Les prix de vente saisis sont considérés <b>TTC</b> : la TVA est extraite automatiquement pour la comptabilité.</p>
+    <div class="grid2">
+      <div><label>TVA activée ?</label><select id="set-tvaen"><option value="1" ${S.settings.tvaEnabled?"selected":""}>Oui — assujetti à la TVA</option><option value="0" ${!S.settings.tvaEnabled?"selected":""}>Non — non assujetti</option></select></div>
+      <div><label>Taux de TVA (%)</label><input type="number" id="set-tvarate" value="${S.settings.tvaRate}" min="0" max="100" step="0.5"></div>
+      <div><label>NINEA (n° fiscal)</label><input id="set-ninea" value="${esc(S.settings.ninea||"")}" placeholder="Ex. 0071234567"></div>
+      <div><label>RCCM</label><input id="set-rccm" value="${esc(S.settings.rccm||"")}" placeholder="Ex. SN-DKR-2026-A-1234"></div>
+    </div>
+    <div class="row" style="margin-top:10px"><button class="btn" id="set-save">Enregistrer les paramètres fiscaux</button></div>
+    <p class="muted" style="margin-top:8px">La déclaration de TVA et son export PDF se trouvent dans l'onglet <b>Comptabilité</b>.</p>
+  </div>
+
+  <div class="panel">
+    <h3>Programme de fidélité ⭐</h3>
+    <p class="muted" style="margin-bottom:10px">Chaque commande livrée crédite automatiquement des points, visibles sur la fiche client et le portail.</p>
+    <div class="grid2">
+      <div><label>Fidélité activée ?</label><select id="set-loyen"><option value="1" ${S.settings.loyaltyEnabled?"selected":""}>Oui</option><option value="0" ${!S.settings.loyaltyEnabled?"selected":""}>Non</option></select></div>
+      <div><label>Points par tranche</label><input type="number" id="set-loyrate" value="${S.settings.loyaltyRate||1}" min="1"></div>
+      <div><label>Tranche (FCFA) = 1 attribution</label><input type="number" id="set-loyper" value="${S.settings.loyaltyPer||1000}" min="100" step="100"></div>
+    </div>
+    <p class="muted" style="margin-top:8px">Exemple : ${S.settings.loyaltyRate||1} point(s) par ${fmt(S.settings.loyaltyPer||1000)} de commande livrée.</p>
+    <div class="row" style="margin-top:10px"><button class="btn" id="set-loysave">Enregistrer la fidélité</button></div>
+  </div>`;
+}
+
 function vBackup(){
   const modeTxt = store.mode==="firebase" ? "Base de données en ligne Firebase (partagée, temps réel)" : store.mode==="claude" ? "Application Claude (stockage du compte)" : store.mode==="local" ? "Navigateur de cet appareil (localStorage)" : "Mémoire temporaire ⚠";
   return `
@@ -1371,29 +1471,7 @@ function vBackup(){
     <p>${S.products.length} produits · ${S.clients.length} clients · ${S.orders.length} commandes · ${S.expenses.length} dépenses · ${S.users.length} utilisateurs</p>
     <div class="row" style="margin-top:10px"><button class="btn sm" style="background:var(--rouge)" id="bk-reset">Tout effacer (irréversible)</button></div>
   </div>
-  ${isAdmin()?`<div class="panel">
-    <h3>Paramètres TVA</h3>
-    <p class="muted" style="margin-bottom:10px">Au Sénégal, la TVA standard est de 18 %. Les prix de vente saisis sont considérés <b>TTC</b> (toutes taxes comprises) : la TVA est extraite automatiquement pour la comptabilité et la déclaration.</p>
-    <div class="grid2">
-      <div><label>TVA activée ?</label><select id="set-tvaen"><option value="1" ${S.settings.tvaEnabled?"selected":""}>Oui — assujetti à la TVA</option><option value="0" ${!S.settings.tvaEnabled?"selected":""}>Non — non assujetti</option></select></div>
-      <div><label>Taux de TVA (%)</label><input type="number" id="set-tvarate" value="${S.settings.tvaRate}" min="0" max="100" step="0.5"></div>
-      <div><label>NINEA (n° fiscal)</label><input id="set-ninea" value="${esc(S.settings.ninea||"")}" placeholder="Ex. 0071234567"></div>
-      <div><label>RCCM</label><input id="set-rccm" value="${esc(S.settings.rccm||"")}" placeholder="Ex. SN-DKR-2026-A-1234"></div>
-    </div>
-    <div class="row" style="margin-top:10px"><button class="btn" id="set-save">Enregistrer les paramètres</button></div>
-    <p class="muted" style="margin-top:8px">La déclaration de TVA et son export PDF se trouvent dans l'onglet <b>Comptabilité</b>.</p>
-  </div>
-  <div class="panel">
-    <h3>Programme de fidélité ⭐</h3>
-    <p class="muted" style="margin-bottom:10px">Récompensez vos clients : chaque commande livrée crédite automatiquement des points, visibles sur leur fiche et sur le portail.</p>
-    <div class="grid2">
-      <div><label>Fidélité activée ?</label><select id="set-loyen"><option value="1" ${S.settings.loyaltyEnabled?"selected":""}>Oui</option><option value="0" ${!S.settings.loyaltyEnabled?"selected":""}>Non</option></select></div>
-      <div><label>Points par tranche</label><input type="number" id="set-loyrate" value="${S.settings.loyaltyRate||1}" min="1"></div>
-      <div><label>Tranche (FCFA) = 1 attribution</label><input type="number" id="set-loyper" value="${S.settings.loyaltyPer||1000}" min="100" step="100"></div>
-    </div>
-    <p class="muted" style="margin-top:8px">Exemple : ${S.settings.loyaltyRate||1} point(s) par ${fmt(S.settings.loyaltyPer||1000)} de commande livrée. Une commande de 50 000 F = ${Math.floor(50000/(S.settings.loyaltyPer||1000))*(S.settings.loyaltyRate||1)} points.</p>
-    <div class="row" style="margin-top:10px"><button class="btn" id="set-loysave">Enregistrer la fidélité</button></div>
-  </div>`:""}`;
+  <div class="infobox">⚙️ Les paramètres fiscaux (TVA, NINEA), la fidélité et les coordonnées de l'entreprise sont désormais dans l'onglet <b>Paramètres</b>.</div>`;
 }
 
 /* ================== MODALE ================== */
@@ -1788,18 +1866,21 @@ function pdfMoney(n){ return (Math.round(n)||0).toLocaleString("fr-FR").replace(
 function pdfBrandHeader(doc, opts){
   opts = opts||{};
   const W = doc.internal.pageSize.getWidth();
+  const co = (S.settings && S.settings.company) || {};
+  const name = co.name || "DISTRIVIA";
   // bandeau bleu nuit
   doc.setFillColor(15,42,74); doc.rect(0,0,W,26,"F");
   doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(20);
-  doc.text("DISTRIVIA", 14, 13);
+  doc.text(name, 14, 13);
   // barre terracotta (signature)
   doc.setFillColor(200,94,45); doc.rect(14, 16, 34, 1.6, "F");
   doc.setFont("helvetica","normal"); doc.setFontSize(7); doc.setTextColor(200,210,225);
-  doc.text("DISTRIBUTION GROUP", 14, 22);
+  doc.text((co.tagline||"DISTRIBUTION GROUP"), 14, 22);
   // coordonnées à droite
   doc.setFontSize(8); doc.setTextColor(220,228,238);
   const st = S.settings||{};
-  const right = ["Dakar · Sénégal", "contact@distrivia.sn · +221 77 527 82 24"];
+  const contactLine = [co.email||"", co.phone1||""].filter(Boolean).join(" · ");
+  const right = [co.address||"Dakar · Sénégal", contactLine];
   if(st.ninea||st.rccm){ right.push((st.ninea?"NINEA "+st.ninea:"")+(st.ninea&&st.rccm?" · ":"")+(st.rccm?"RCCM "+st.rccm:"")); }
   right.forEach((line,i)=> doc.text(line, W-14, 9+i*4.5, {align:"right"}));
   // titre du document
@@ -1815,9 +1896,10 @@ function pdfBrandHeader(doc, opts){
 }
 function pdfFooter(doc, note){
   const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
+  const co = (S.settings && S.settings.company) || {};
   doc.setDrawColor(225,221,212); doc.line(14, H-16, W-14, H-16);
   doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(140,140,140);
-  doc.text(note||"DISTRIVIA Distribution Group · Dakar, Sénégal", 14, H-11);
+  doc.text(note||((co.name||"DISTRIVIA")+" · "+(co.address||"Dakar, Sénégal")), 14, H-11);
   doc.text("Édité le "+frDate(today()), W-14, H-11, {align:"right"});
 }
 // FACTURE en PDF téléchargeable
@@ -3240,10 +3322,10 @@ function render(){
   const root = el("root");
   if (!S.users.length) { root.innerHTML = vSetup(); bindSetup(); return; }
   if (!session || !me()) { root.innerHTML = vLogin(); bindLogin(); return; }
-  const views = {dash:vDash, weborders:vWebOrders, messages:vMessages, orders:vOrders, invoices:vInvoices, clients:vClients, products:vProducts, suppliers:vSuppliers, logistics:vLogistics, cash:vCash, accounting:vAccounting, control:vControl, marketing:vMarketing, hr:vHR, monitoring:vMonitoring, users:vUsers, backup:vBackup};
+  const views = {dash:vDash, weborders:vWebOrders, messages:vMessages, orders:vOrders, invoices:vInvoices, clients:vClients, products:vProducts, suppliers:vSuppliers, logistics:vLogistics, cash:vCash, accounting:vAccounting, control:vControl, marketing:vMarketing, hr:vHR, monitoring:vMonitoring, users:vUsers, settings:vSettings, backup:vBackup};
   const guard = {weborders:"orders_create", cash:"cash_view", suppliers:"suppliers", accounting:"accounting", control:"control", logistics:"logistics", marketing:"marketing", hr:"hr", monitoring:"monitoring"};
   if (guard[tab] && !can(guard[tab])) tab="dash";
-  if ((tab==="users"||tab==="backup") && !isAdmin()) tab = "dash";
+  if ((tab==="users"||tab==="backup"||tab==="settings") && !isAdmin()) tab = "dash";
   root.innerHTML = chrome(views[tab]());
   bindApp();
   if (tab==="dash") setTimeout(drawCharts, 30);
@@ -3838,6 +3920,7 @@ function bindApp(){
     S.settings.tvaRate = +el("set-tvarate").value||0;
     S.settings.ninea = el("set-ninea").value.trim();
     S.settings.rccm = el("set-rccm").value.trim();
+    if(S.settings.company){ S.settings.company.ninea=S.settings.ninea; S.settings.company.rccm=S.settings.rccm; }
     log("Paramètres TVA mis à jour");
     await save(); render(); toast("Paramètres TVA enregistrés ✓");
   };
@@ -3849,6 +3932,40 @@ function bindApp(){
     S.settings.loyaltyPer = Math.max(100, +el("set-loyper").value||1000);
     log("Paramètres fidélité mis à jour");
     await save(); render(); toast("Programme de fidélité enregistré ✓");
+  };
+  // ===== Coordonnées entreprise (onglet Paramètres) =====
+  let pendingLogo = (S.settings.company && S.settings.company.logo) || "";
+  const coLogo = el("co-logo");
+  if(coLogo) coLogo.onchange = async (e)=>{
+    const f=e.target.files[0]; if(!f) return;
+    try{ pendingLogo = await compressImage(f, 256, .85);
+      const prev=el("co-logo-preview"); if(prev) prev.innerHTML=`<img src="${pendingLogo}" style="width:100%;height:100%;object-fit:contain">`;
+      toast("Logo prêt — cliquez sur Enregistrer");
+    }catch(err){ toast("Image invalide"); }
+  };
+  const coLogoRm = el("co-logo-remove");
+  if(coLogoRm) coLogoRm.onclick = ()=>{ pendingLogo=""; const prev=el("co-logo-preview"); if(prev) prev.innerHTML='<span style="color:#bbb;font-size:22px">D</span>'; toast("Logo retiré — cliquez sur Enregistrer"); };
+  const coSave = el("co-save");
+  if(coSave) coSave.onclick = async ()=>{
+    S.settings = S.settings || {}; S.settings.company = S.settings.company || {};
+    const c = S.settings.company;
+    c.name = el("co-name").value.trim() || "DISTRIVIA";
+    c.tagline = el("co-tagline").value.trim();
+    c.slogan = el("co-slogan").value.trim();
+    c.phone1 = el("co-phone1").value.trim();
+    c.phone2 = el("co-phone2").value.trim();
+    c.whatsapp = el("co-whatsapp").value.replace(/[^\d]/g,"");
+    c.email = el("co-email").value.trim();
+    c.address = el("co-address").value.trim();
+    c.website = el("co-website").value.trim();
+    c.hours = el("co-hours").value.trim();
+    c.hours2 = el("co-hours2").value.trim();
+    c.hours3 = el("co-hours3").value.trim();
+    c.logo = pendingLogo;
+    // garde NINEA/RCCM en phase pour le portail
+    c.ninea = S.settings.ninea||""; c.rccm = S.settings.rccm||"";
+    log("Coordonnées entreprise mises à jour");
+    await save(); render(); toast("Coordonnées enregistrées ✓ — appliquées à Gestion et au portail");
   };
   const bkE = el("bk-export");
   if(bkE){
@@ -3887,6 +4004,7 @@ function bindApp(){
 }
 
 loadAll();
+if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
 </script>
 </body>
 </html>
