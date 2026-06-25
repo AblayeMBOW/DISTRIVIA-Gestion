@@ -1181,6 +1181,7 @@ function vProducts(){
       </div>
     </div>
     <div class="row" style="margin-top:10px"><button class="btn" id="p-add">Ajouter le produit</button>
+    <button class="btn ghost" id="p-import">Importer une liste</button>
     <span class="muted">Coût de revient = rendu entrepôt Dakar (achat + fret + douane).</span></div>
   </div>`:""}
   <div class="panel"><div class="tablewrap"><table>
@@ -3360,6 +3361,68 @@ function drawHRCharts(){
 }
 
 /* ================== RENDU ================== */
+/* ===== IMPORT CATALOGUE (coller une liste) ===== */
+function normalizeFamily(s){
+  const x=(s||"").toLowerCase().trim();
+  const map={
+    "restauration":"Restauration & take-away","take-away":"Restauration & take-away","resto":"Restauration & take-away","restauration & take-away":"Restauration & take-away",
+    "hygiène":"Hygiène & entretien","hygiene":"Hygiène & entretien","entretien":"Hygiène & entretien","hygiène & entretien":"Hygiène & entretien",
+    "médical":"Médical","medical":"Médical","santé":"Médical","sante":"Médical",
+    "événementiel":"Événementiel","evenementiel":"Événementiel","fête":"Événementiel",
+    "écologique":"Écologique","ecologique":"Écologique","éco":"Écologique","bio":"Écologique",
+    "informatique":"Consommables informatiques","consommables informatiques":"Consommables informatiques","info":"Consommables informatiques",
+    "matériel de bureau":"Matériel de bureau","materiel de bureau":"Matériel de bureau","bureau":"Matériel de bureau","fourniture":"Matériel de bureau",
+    "mobilier":"Mobilier de bureau","mobilier de bureau":"Mobilier de bureau"
+  };
+  if(map[x]) return map[x];
+  // correspondance partielle
+  for(const k in map){ if(x && (x.includes(k)||k.includes(x))) return map[k]; }
+  return FAMILIES[0];
+}
+function parseNum(s){ return Math.round(parseFloat(String(s||"").replace(/[^\d.,-]/g,"").replace(/\s/g,"").replace(",","."))||0); }
+function parseImport(text){
+  const rows=[];
+  String(text||"").split(/\r?\n/).forEach(line=>{
+    if(!line.trim()) return;
+    // séparateur : tabulation, point-virgule, ou virgule (mais pas la virgule des nombres)
+    let parts = line.includes("\t") ? line.split("\t") : line.includes(";") ? line.split(";") : line.split(/,(?![0-9])/);
+    parts = parts.map(p=>p.trim());
+    const name = parts[0]; if(!name) return;
+    // ignore une éventuelle ligne d'en-tête
+    if(/^(nom|produit|désignation|designation)$/i.test(name)) return;
+    rows.push({ name, family:normalizeFamily(parts[1]), cost:parseNum(parts[2]), price:parseNum(parts[3]), stock:parseNum(parts[4]), alert: parts[5]!==undefined&&parts[5]!==""?parseNum(parts[5]):20 });
+  });
+  return rows;
+}
+function openImportProducts(){
+  openModal(`
+    <h3>Importer une liste de produits</h3>
+    <p class="muted" style="font-size:13px;margin-top:0">Colle une liste (depuis Excel, Google Sheets ou un tableau). Une ligne par produit, colonnes dans cet ordre :<br><b>Nom · Famille · Coût · Prix · Stock · Seuil</b> (séparés par tabulation, point-virgule ou virgule). Seul le <b>Nom</b> est obligatoire.</p>
+    <textarea id="imp-text" rows="9" style="width:100%;font-family:monospace;font-size:12.5px" placeholder="Gobelet carton 25cl (carton 1000)	Restauration	9500	12500	0	20
+Sac poubelle 100L (rouleau x10)	Hygiène	1800	2600	0	30"></textarea>
+    <div class="row" style="margin-top:10px;justify-content:space-between">
+      <button class="btn ghost" id="imp-preview">Aperçu</button>
+      <div class="row"><button class="btn ghost" onclick="closeModal()">Annuler</button><button class="btn" id="imp-go" style="display:none">Importer</button></div>
+    </div>
+    <div id="imp-result" style="margin-top:12px"></div>`);
+  let parsed=[];
+  el("imp-preview").onclick=()=>{
+    parsed=parseImport(el("imp-text").value);
+    if(!parsed.length){ el("imp-result").innerHTML=`<p class="muted">Aucune ligne détectée. Vérifie le format.</p>`; el("imp-go").style.display="none"; return; }
+    el("imp-result").innerHTML=`<div class="tablewrap" style="max-height:240px;overflow:auto"><table style="font-size:12.5px">
+      <tr><th>Nom</th><th>Famille</th><th class="num">Coût</th><th class="num">Prix</th><th class="num">Stock</th><th class="num">Seuil</th></tr>
+      ${parsed.map(p=>`<tr><td>${esc(p.name)}</td><td class="muted">${esc(p.family)}</td><td class="num">${fmt(p.cost)}</td><td class="num">${fmt(p.price)}</td><td class="num">${p.stock}</td><td class="num">${p.alert}</td></tr>`).join("")}
+    </table></div><p class="muted" style="font-size:12px">${parsed.length} produit(s) prêt(s) à importer. Les familles ont été reconnues automatiquement — vérifie qu'elles sont correctes.</p>`;
+    el("imp-go").style.display="";
+  };
+  el("imp-go").onclick=async ()=>{
+    if(!parsed.length) return;
+    parsed.forEach(p=> S.products.push({ id:nid(), name:p.name, family:p.family, cost:p.cost, price:p.price, stock:p.stock, alert:p.alert, img:null }));
+    log("Import catalogue : "+parsed.length+" produits");
+    await save(); closeModal(); render(); toast(parsed.length+" produits importés ✓");
+  };
+}
+
 function render(){
   const root = el("root");
   if (!S.users.length) { root.innerHTML = vSetup(); bindSetup(); return; }
@@ -3631,6 +3694,8 @@ function bindApp(){
     log("Produit créé : "+name);
     await save(); render(); toast("Produit ajouté ✓");
   };
+  const pImport = el("p-import");
+  if(pImport) pImport.onclick = ()=> openImportProducts();
   // changer/ajouter une photo sur un produit existant
   document.querySelectorAll("[data-pimg]").forEach(b=> b.onclick = ()=>{
     const id=+b.dataset.pimg;
