@@ -156,6 +156,9 @@
     .mg-sheet-item .mgsi-ic{color:var(--terra); display:flex;}
     .mg-sheet-item:active{background:#f0ebe0;}
   }
+  /* ===== Bannières robustesse ===== */
+  #syncbanner{display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:78px;z-index:300;background:#1B3D63;color:#fff;padding:11px 16px;border-radius:10px;font-size:13px;max-width:92vw;box-shadow:0 8px 24px rgba(0,0,0,.3);font-family:Arial,sans-serif;}
+  #dbbanner{display:none;position:fixed;left:0;right:0;top:0;z-index:280;color:#fff;padding:9px 14px;text-align:center;font-size:13px;font-weight:600;font-family:Arial,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.2);}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
@@ -260,6 +263,17 @@ window.DISTRIVIA_FB = {
     if(!FB_OK) return;
     try{ await firebase.firestore().collection(name).doc(id).delete(); }
     catch(e){ console.warn("deleteDoc:", e); }
+  },
+  /* ---- Archive : document séparé (ne compte pas dans la limite du bloc principal) ---- */
+  async getArchive(){
+    if(!FB_OK) return null;
+    try{ const s = await firebase.firestore().collection("distrivia").doc("archive").get(); return s.exists ? (s.data().blob || null) : null; }
+    catch(e){ console.warn("getArchive:", e); return null; }
+  },
+  async setArchive(blob){
+    if(!FB_OK) return;
+    try{ await firebase.firestore().collection("distrivia").doc("archive").set({ blob, updated: Date.now() }); }
+    catch(e){ console.warn("setArchive:", e); }
   }
 };
 </script>
@@ -494,13 +508,8 @@ async function loadAll(){
   if (FB.ok){
     FB.listen((blob, localWrite)=>{
       if (localWrite) return; // c'est notre propre écriture, on ignore
-      try{
-        const incoming = JSON.parse(blob);
-        // on ne touche pas si on est en train d'éditer un formulaire sensible
-        S = incoming; migrate();
-        if (session && !me()) session = null;
-        fbSyncing = true; render(); fbSyncing = false;
-      }catch(e){ console.warn("sync:", e); }
+      if (modalContent){ pendingRemoteBlob = blob; showSyncBanner(); return; } // formulaire ouvert : on préserve la saisie
+      applyRemoteBlob(blob);
     });
     // Écoute des données du portail clients/fournisseurs
     if (FB.listenCollection){
@@ -534,8 +543,76 @@ function refreshWebBadge(){
   }
 }
 async function save(){
+  if (modalContent) savedDuringModal = true;  // un enregistrement a eu lieu pendant un formulaire ouvert
   try{ await store.set(KEY, JSON.stringify(S)); }
   catch(e){ toast("⚠ Échec de la sauvegarde — exportez vos données"); }
+  updateDbBanner();
+}
+
+/* ===== ROBUSTESSE : taille de la base, conflits, archivage ===== */
+const BLOB_LIMIT = 1048576; // 1 Mo : limite d'un document Firebase
+let pendingRemoteBlob = null;   // mise à jour distante en attente (formulaire ouvert)
+let savedDuringModal = false;
+let _lastDbLevel = "ok";
+function applyRemoteBlob(blob){
+  try{
+    const incoming = JSON.parse(blob);
+    S = incoming; migrate();
+    if (session && !me()) session = null;
+    fbSyncing = true; render(); fbSyncing = false;
+  }catch(e){ console.warn("sync:", e); }
+}
+function dbBytes(){ try{ return new Blob([JSON.stringify(S)]).size; }catch(e){ return JSON.stringify(S).length; } }
+function dbHealth(){ const b=dbBytes(); const pct=b/BLOB_LIMIT; return { bytes:b, pct, level: pct>=0.9?"crit":(pct>=0.75?"warn":"ok") }; }
+function fmtKo(b){ return (b/1024).toFixed(0); }
+function showSyncBanner(){
+  let el0=document.getElementById("syncbanner");
+  if(!el0){ el0=document.createElement("div"); el0.id="syncbanner"; document.body.appendChild(el0); }
+  el0.innerHTML='🔄 Un autre utilisateur vient d\'enregistrer. Votre saisie est préservée — ses changements s\'afficheront à la fermeture de ce formulaire.';
+  el0.style.display="block";
+}
+function hideSyncBanner(){ const e=document.getElementById("syncbanner"); if(e) e.style.display="none"; }
+function updateDbBanner(){
+  const h=dbHealth();
+  let el0=document.getElementById("dbbanner");
+  if(h.level==="ok"){ if(el0) el0.style.display="none"; _lastDbLevel="ok"; return; }
+  if(!el0){ el0=document.createElement("div"); el0.id="dbbanner"; document.body.appendChild(el0); }
+  const pct=Math.round(h.pct*100);
+  if(h.level==="crit"){
+    el0.style.background="#A33B3B";
+    el0.innerHTML=`⚠️ Base de données presque pleine (${pct}%). Archivez d'anciennes commandes soldées (onglet Sauvegarde) pour éviter tout blocage.`;
+  } else {
+    el0.style.background="#C9962B";
+    el0.innerHTML=`⚠ Base de données remplie à ${pct}%. Pensez à archiver d'anciennes commandes (onglet Sauvegarde).`;
+  }
+  el0.style.display="block";
+  _lastDbLevel=h.level;
+}
+async function archiveOrders(beforeISO){
+  if(!beforeISO) return toast("Choisissez une date");
+  const toArch = S.orders.filter(o=> o.date && o.date < beforeISO && orderTotal(o)>0 && orderPaid(o) >= orderTotal(o));
+  if(!toArch.length) return toast("Aucune commande soldée avant cette date.");
+  confirmAction({title:"Archiver des commandes", message:`Archiver ${toArch.length} commande(s) soldée(s) avant le ${frDate(beforeISO)} ? Elles quitteront les listes actives mais resteront consultables dans les archives.`, okLabel:"Archiver"}, async ()=>{
+    let arch=[];
+    if(FB.getArchive){ const raw=await FB.getArchive(); if(raw){ try{ arch=JSON.parse(raw);}catch(e){} } }
+    arch = arch.concat(toArch);
+    if(FB.setArchive) await FB.setArchive(JSON.stringify(arch));
+    const ids=new Set(toArch.map(o=>o.id));
+    S.orders = S.orders.filter(o=>!ids.has(o.id));
+    log("Archivage de "+toArch.length+" commandes soldées");
+    await save(); render(); toast(toArch.length+" commande(s) archivée(s) ✓");
+  });
+}
+async function openArchives(){
+  let arch=[];
+  if(FB.getArchive){ const raw=await FB.getArchive(); if(raw){ try{ arch=JSON.parse(raw);}catch(e){} } }
+  arch.sort((a,b)=>(b.date||"")<(a.date||"")?-1:1);
+  const rows = arch.length ? arch.map(o=>`<tr><td>${o.invoiceNum||o.num||o.id}</td><td>${o.date?frDate(o.date):""}</td><td>${esc(o.clientName||clientName(o.clientId)||"")}</td><td class="num">${fmt(orderTotal(o))}</td></tr>`).join("")
+    : `<tr><td colspan="4" style="text-align:center;color:#888;padding:16px">Aucune commande archivée.</td></tr>`;
+  openModal(`<h3>Commandes archivées</h3>
+    <p class="muted" style="font-size:13px;margin-top:0">${arch.length} commande(s) archivée(s) (lecture seule). Elles n'apparaissent plus dans les listes ni le tableau de bord, mais restent conservées en sécurité.</p>
+    <div class="tablewrap" style="max-height:50vh;overflow:auto"><table><tr><th>N°</th><th>Date</th><th>Client</th><th class="num">Total</th></tr>${rows}</table></div>
+    <div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn ghost" onclick="closeModal()">Fermer</button></div>`);
 }
 async function saveSession(){
   if (session) await localStore.set(KEY_SESSION, JSON.stringify(session));
@@ -651,6 +728,10 @@ function migrate(){
   if (co.ninea === undefined) co.ninea = S.settings.ninea||"";
   if (co.rccm === undefined) co.rccm = S.settings.rccm||"";
   (S.clients||[]).forEach(c=>{ if(c.points===undefined) c.points=0; if(!c.matricule){ c.matricule="CLI-"+String(S.clientSeq++).padStart(4,"0"); } });
+  // Vague 2 — devis & bons de livraison
+  if (!S.quotes) S.quotes = [];
+  if (!S.quoteSeq) S.quoteSeq = 1;
+  if (!S.blSeq) S.blSeq = 1;
 }
 
 /* Téléphone : helpers */
@@ -754,6 +835,7 @@ function chrome(content){
     ["dash","Tableau de bord",true],
     ["weborders","Commandes web",can("orders_create")],
     ["messages","Messages",true],
+    ["quotes","Devis",can("orders_create")],
     ["orders","Commandes",true],
     ["invoices","Factures",true],
     ["clients","Clients",true],
@@ -1177,7 +1259,11 @@ function vProducts(){
       <div style="grid-column:1/-1"><label>Photo du produit (optionnel)</label>
         <input id="p-img" type="file" accept="image/*" style="font-size:13px">
         <div id="p-img-preview" style="margin-top:8px"></div>
-        <span class="muted" style="font-size:12px">La photo est automatiquement redimensionnée pour le web. Elle s'affichera dans le catalogue du portail.</span>
+        <span class="muted" style="font-size:12px">Photo intégrée : à réserver à quelques produits phares (limite de poids). Pour tout le catalogue, préférez un lien image ci-dessous.</span>
+      </div>
+      <div style="grid-column:1/-1"><label>…ou lien image (URL)</label>
+        <input id="p-imgurl" placeholder="https://… (adresse d'une image en ligne)">
+        <span class="muted" style="font-size:12px">L'app ne stocke que le lien (léger). Idéal pour mettre des photos sur beaucoup de produits sans alourdir la base.</span>
       </div>
     </div>
     <div class="row" style="margin-top:10px"><button class="btn" id="p-add">Ajouter le produit</button>
@@ -1194,7 +1280,7 @@ function vProducts(){
       <td class="num"><b>${p.stock}</b></td>
       <td>${p.stock<=p.alert?'<span class="badge alert">BAS</span>':'<span class="badge ok">OK</span>'}</td>
       ${sr?`<td><div class="row"><input type="number" min="1" style="width:64px" id="rcv-${p.id}" placeholder="qté"><button class="btn sm b" data-rcv="${p.id}">+ Stock</button></div></td>`:""}
-      ${pm?`<td class="row"><button class="btn sm ghost" data-pimg="${p.id}">📷</button><button class="del" data-delp="${p.id}" title="Supprimer">✕</button></td>`:""}</tr>`;
+      ${pm?`<td class="row"><button class="btn sm ghost" data-pimg="${p.id}" title="Photo (fichier)">📷</button><button class="btn sm ghost" data-pimgurl="${p.id}" title="Lien image (URL)">🔗</button><button class="del" data-delp="${p.id}" title="Supprimer">✕</button></td>`:""}</tr>`;
     }).join("") : `<tr><td colspan="10" class="empty">Aucun produit.</td></tr>`}
   </table></div></div>`;
 }
@@ -1246,6 +1332,159 @@ function vClients(){
       </table></div>`:`<p class="empty">Aucun prospect pour l'instant.</p>`}
     </div>`;
   })()}`;
+}
+
+/* ================== DEVIS ================== */
+let quoteDraft = null;
+function quoteTotal(q){ return (q.lines||[]).reduce((a,l)=>a+l.qty*l.price,0); }
+function quoteTVA(q){ if(q.tvaApplicable===false || !tvaRate()) return 0; const t=quoteTotal(q); return t - t/(1+tvaRate()/100); }
+function vQuotes(){
+  const oc = can("orders_create");
+  let form="";
+  if(oc){
+    if(!S.products.length || !S.clients.length){
+      form = `<div class="panel"><p class="empty">Créez d'abord au moins un produit et un client.</p></div>`;
+    } else {
+      if(!quoteDraft) quoteDraft = { clientId:S.clients[0].id, date:today(), validity:(()=>{const d=new Date();d.setDate(d.getDate()+30);return d.toISOString().slice(0,10);})(), lines:[], tvaApplicable:true };
+      const total = quoteTotal(quoteDraft);
+      form = `<div class="panel"><h3>Nouveau devis — N° ${"DEV-"+String(S.quoteSeq).padStart(4,"0")}</h3>
+      <div class="grid2">
+        <div><label>Client</label><select id="q-client">${S.clients.map(c=>`<option value="${c.id}" ${c.id==quoteDraft.clientId?"selected":""}>${esc(c.name)}</option>`).join("")}</select></div>
+        <div><label>Date</label><input id="q-date" type="date" value="${quoteDraft.date}"></div>
+        <div><label>Valable jusqu'au</label><input id="q-valid" type="date" value="${quoteDraft.validity}"></div>
+        ${tvaRate()?`<div><label>TVA (${tvaRate()} %)</label><select id="q-tva"><option value="1" ${quoteDraft.tvaApplicable!==false?"selected":""}>Soumis à la TVA (prix TTC)</option><option value="0" ${quoteDraft.tvaApplicable===false?"selected":""}>Non soumis à la TVA</option></select></div>`:""}
+      </div>
+      <h3>Lignes</h3>
+      <div class="lines">
+        ${quoteDraft.lines.map((l,i)=>`<div class="ln">
+          <select data-qlprod="${i}">${S.products.map(p=>`<option value="${p.id}" ${p.id==l.productId?"selected":""}>${esc(p.name)}</option>`).join("")}</select>
+          <input type="number" min="1" value="${l.qty}" data-qlqty="${i}">
+          <input type="number" min="0" value="${l.price}" data-qlprice="${i}">
+          <button class="del" data-qlrm="${i}">✕</button>
+        </div>`).join("")}
+      </div>
+      <div class="row"><button class="btn ghost" id="q-addline">+ Ajouter une ligne</button></div>
+      <div class="total">Total : ${fmt(total)}</div>
+      <div class="row" style="margin-top:8px"><button class="btn" id="q-save" ${quoteDraft.lines.length?"":"disabled"}>Enregistrer le devis</button>
+      <span class="muted">Un devis n'impacte pas le stock. Convertis-le en commande une fois accepté.</span></div></div>`;
+    }
+  }
+  const list = [...S.quotes].sort((a,b)=>b.id-a.id);
+  const badge = s => s==="converti"?'<span class="badge ok">Converti</span>':s==="accepté"?'<span class="badge delivered">Accepté</span>':s==="refusé"?'<span class="badge" style="background:#f0d9d9;color:#A33B3B">Refusé</span>':'<span class="badge pending">En attente</span>';
+  return `<h2>Devis</h2>${form}
+  <div class="panel"><h3 style="margin:0 0 8px">Devis (${S.quotes.length})</h3>
+  <div class="tablewrap"><table>
+    <tr><th>N°</th><th>Date</th><th>Client</th><th class="num">Total</th><th>Validité</th><th>Statut</th><th></th></tr>
+    ${list.length? list.map(q=>`<tr>
+      <td><b>${esc(q.num)}</b></td><td>${frDate(q.date)}</td><td>${esc(clientName(q.clientId))}</td>
+      <td class="num">${fmt(quoteTotal(q))}</td><td class="${q.validity&&q.validity<today()&&q.status!=='converti'?'':''}" style="${q.validity&&q.validity<today()&&q.status!=='converti'?'color:var(--rouge)':''}">${q.validity?frDate(q.validity):"—"}</td>
+      <td>${badge(q.status)}</td>
+      <td class="row" style="gap:4px">
+        <button class="btn sm ghost" data-qpdf="${q.id}" title="Télécharger le PDF">⬇ PDF</button>
+        ${q.status!=="converti"?`<button class="btn sm b" data-qconv="${q.id}" title="Convertir en commande">→ Commande</button>`:""}
+        ${q.status!=="converti"?`<button class="btn sm ghost" data-qaccept="${q.id}" title="Marquer accepté">✓</button>`:""}
+        <button class="del" data-qdel="${q.id}" title="Supprimer">✕</button>
+      </td></tr>`).join("") : `<tr><td colspan="7" class="empty">Aucun devis. Créez-en un ci-dessus.</td></tr>`}
+  </table></div></div>`;
+}
+// PDF DEVIS (réutilise l'identité de la facture)
+function pdfQuote(q){
+  const { jsPDF } = window.jspdf; const doc = new jsPDF({unit:"mm",format:"a4"});
+  const W = doc.internal.pageSize.getWidth();
+  const c = S.clients.find(c=>c.id===q.clientId)||{};
+  const ttc=quoteTotal(q), tva=quoteTVA(q), ht=ttc-tva;
+  pdfBrandHeader(doc, {});
+  doc.setFillColor(200,94,45); doc.roundedRect(W-74, 30, 60, 16, 2, 2, "F");
+  doc.setTextColor(255,235,225); doc.setFontSize(7); doc.text("DEVIS", W-70, 36);
+  doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(13); doc.text(q.num, W-70, 43);
+  doc.setTextColor(90,90,90); doc.setFont("helvetica","normal"); doc.setFontSize(9);
+  doc.text("Date : "+frDate(q.date), W-14, 52, {align:"right"});
+  if(q.validity) doc.text("Valable jusqu'au "+frDate(q.validity), W-14, 57, {align:"right"});
+  doc.setTextColor(140,140,140); doc.setFontSize(8); doc.text("DEVIS POUR", 14, 36);
+  doc.setTextColor(26,26,26); doc.setFont("helvetica","bold"); doc.setFontSize(12);
+  doc.text((c.name||"Client")+(c.matricule?"  ("+c.matricule+")":""), 14, 43);
+  doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(80,80,80);
+  let cy=48; if(c.type){ doc.text(c.type, 14, cy); cy+=4.5; } if(c.phone){ doc.text(c.phone, 14, cy); cy+=4.5; } if(c.zone){ doc.text(c.zone+", Dakar", 14, cy); cy+=4.5; }
+  let y = Math.max(cy, 64) + 4;
+  doc.setFillColor(15,42,74); doc.rect(14, y, W-28, 8, "F");
+  doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(8.5);
+  doc.text("Désignation", 16, y+5.5); doc.text("Qté", W-78, y+5.5, {align:"right"}); doc.text("P.U. HT", W-48, y+5.5, {align:"right"}); doc.text("Montant HT", W-16, y+5.5, {align:"right"});
+  y+=8; doc.setTextColor(40,40,40); doc.setFont("helvetica","normal"); doc.setFontSize(9);
+  q.lines.forEach((l,i)=>{
+    if(y>250){ doc.addPage(); y=20; }
+    const lineTTC=l.qty*l.price; const puHT=tva>0?l.price/(1+tvaRate()/100):l.price; const lineHT=tva>0?lineTTC/(1+tvaRate()/100):lineTTC;
+    if(i%2){ doc.setFillColor(245,241,232); doc.rect(14,y,W-28,7,"F"); }
+    doc.text(String(prodName(l.productId)||l.name||"").slice(0,52), 16, y+5);
+    doc.text(String(l.qty), W-78, y+5, {align:"right"});
+    doc.text(pdfMoney(puHT), W-48, y+5, {align:"right"});
+    doc.text(pdfMoney(lineHT), W-16, y+5, {align:"right"});
+    y+=7;
+  });
+  y+=4; const bx=W-90;
+  doc.setFont("helvetica","normal"); doc.setFontSize(9.5); doc.setTextColor(80,80,80);
+  doc.text("Total HT", bx, y); doc.text(pdfMoney(ht), W-16, y, {align:"right"}); y+=6;
+  if(tva>0){ doc.text("TVA "+tvaRate()+" %", bx, y); doc.text(pdfMoney(tva), W-16, y, {align:"right"}); y+=6; }
+  else { doc.setTextColor(140,140,140); doc.text("Non assujetti à la TVA", bx, y); y+=6; }
+  doc.setFillColor(245,241,232); doc.rect(bx-4, y-4.5, W-16-(bx-4)+4, 9, "F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.setTextColor(200,94,45);
+  doc.text("TOTAL"+(tva>0?" TTC":""), bx, y+1.5); doc.text(pdfMoney(ttc), W-16, y+1.5, {align:"right"}); y+=12;
+  doc.setFont("helvetica","normal"); doc.setFontSize(8.5); doc.setTextColor(90,90,90);
+  doc.text("Devis valable "+(q.validity?("jusqu'au "+frDate(q.validity)):"30 jours")+". Bon pour accord (date et signature) :", 14, y+4, {maxWidth:W-28});
+  doc.setDrawColor(200,200,200); doc.rect(14, y+8, 80, 18);
+  pdfFooter(doc);
+  return doc;
+}
+function downloadQuotePDF(q){ const doc=pdfQuote(q); doc.save((q.num||"devis")+".pdf"); toast("Devis PDF téléchargé ✓"); }
+async function convertQuoteToOrder(id){
+  const q=S.quotes.find(x=>x.id===id); if(!q) return;
+  confirmAction({title:"Convertir en commande", message:`Convertir le devis <b>${esc(q.num)}</b> en commande ? Une commande sera créée pour ${esc(clientName(q.clientId))}.`, okLabel:"Convertir"}, async ()=>{
+    const num = "CMD-" + String(S.orderSeq++).padStart(4,"0");
+    S.orders.push({ id:nid(), num, date:today(), clientId:q.clientId, payMode:"comptant", dueDate:null, lines:q.lines.map(l=>({...l})), status:"pending", delivered:false, payments:[], createdBy:me().name, tvaApplicable:q.tvaApplicable!==false, fromQuote:q.num });
+    q.status="converti"; q.orderNum=num;
+    log("Devis "+q.num+" converti en commande "+num);
+    await save(); render(); toast("Commande "+num+" créée depuis le devis ✓");
+  });
+}
+// PDF BON DE LIVRAISON (quantités, sans prix)
+function pdfDeliveryNote(o){
+  const { jsPDF } = window.jspdf; const doc = new jsPDF({unit:"mm",format:"a4"});
+  const W = doc.internal.pageSize.getWidth();
+  const c = S.clients.find(c=>c.id===o.clientId)||{};
+  pdfBrandHeader(doc, {});
+  doc.setFillColor(46,107,62); doc.roundedRect(W-74, 30, 60, 16, 2, 2, "F");
+  doc.setTextColor(225,240,225); doc.setFontSize(7); doc.text("BON DE LIVRAISON", W-70, 36);
+  doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(13); doc.text(o.blNum||"—", W-70, 43);
+  doc.setTextColor(90,90,90); doc.setFont("helvetica","normal"); doc.setFontSize(9);
+  doc.text("Date : "+frDate(o.blDate||today()), W-14, 52, {align:"right"});
+  doc.text("Réf. commande : "+(o.num||""), W-14, 57, {align:"right"});
+  doc.setTextColor(140,140,140); doc.setFontSize(8); doc.text("LIVRÉ À", 14, 36);
+  doc.setTextColor(26,26,26); doc.setFont("helvetica","bold"); doc.setFontSize(12);
+  doc.text((c.name||"Client"), 14, 43);
+  doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(80,80,80);
+  let cy=48; if(c.phone){ doc.text(c.phone, 14, cy); cy+=4.5; } if(c.zone){ doc.text(c.zone+", Dakar", 14, cy); cy+=4.5; }
+  let y = Math.max(cy, 62) + 4;
+  doc.setFillColor(15,42,74); doc.rect(14, y, W-28, 8, "F");
+  doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(8.5);
+  doc.text("Désignation", 16, y+5.5); doc.text("Quantité livrée", W-16, y+5.5, {align:"right"});
+  y+=8; doc.setTextColor(40,40,40); doc.setFont("helvetica","normal"); doc.setFontSize(9.5);
+  o.lines.forEach((l,i)=>{
+    if(y>250){ doc.addPage(); y=20; }
+    if(i%2){ doc.setFillColor(245,241,232); doc.rect(14,y,W-28,8,"F"); }
+    doc.text(String(prodName(l.productId)||l.name||"").slice(0,60), 16, y+5.5);
+    doc.text(String(l.qty), W-16, y+5.5, {align:"right"});
+    y+=8;
+  });
+  y+=6; doc.setDrawColor(225,221,212); doc.line(14, y, W-14, y); y+=8;
+  doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(90,90,90);
+  doc.text("Marchandise reçue conforme. Nom, date et signature du client :", 14, y);
+  doc.setDrawColor(200,200,200); doc.rect(14, y+4, 90, 20);
+  pdfFooter(doc);
+  return doc;
+}
+async function issueDeliveryNote(id){
+  const o=S.orders.find(x=>x.id===id); if(!o) return;
+  if(!o.blNum){ o.blNum = "BL-"+String(S.blSeq++).padStart(4,"0"); o.blDate=today(); log("Bon de livraison "+o.blNum+" — "+o.num); await save(); }
+  const doc=pdfDeliveryNote(o); doc.save((o.blNum||"bon-livraison")+".pdf"); toast("Bon de livraison "+o.blNum+" ✓");
 }
 
 function vOrders(){
@@ -1514,13 +1753,35 @@ function vBackup(){
     <p>${S.products.length} produits · ${S.clients.length} clients · ${S.orders.length} commandes · ${S.expenses.length} dépenses · ${S.users.length} utilisateurs</p>
     <div class="row" style="margin-top:10px"><button class="btn sm" style="background:var(--rouge)" id="bk-reset">Tout effacer (irréversible)</button></div>
   </div>
+  ${store.mode==="firebase"?`<div class="panel">
+    <h3>Santé de la base de données</h3>
+    <p style="margin-bottom:8px">Espace utilisé : <b>${fmtKo(dbHealth().bytes)} Ko</b> / 1024 Ko (<b>${Math.round(dbHealth().pct*100)}%</b>)</p>
+    <div style="height:14px;background:#EFEAdd;border-radius:8px;overflow:hidden;max-width:420px">
+      <div style="height:100%;width:${Math.min(100,Math.round(dbHealth().pct*100))}%;background:${dbHealth().level==='crit'?'var(--rouge)':dbHealth().level==='warn'?'var(--jaune)':'var(--vert)'};border-radius:8px;transition:width .4s"></div>
+    </div>
+    <p class="muted" style="font-size:12.5px;margin-top:8px">Une base Firebase est limitée à ~1 Mo. Quand tu approches de la limite, <b>archive les commandes soldées</b> ci-dessous pour gagner de la place (elles restent consultables).</p>
+    <div class="row" style="margin-top:12px;align-items:center;gap:8px">
+      <label style="margin:0">Archiver les commandes soldées avant le</label>
+      <input type="date" id="bk-arch-date" style="max-width:170px">
+      <button class="btn" id="bk-archive">Archiver</button>
+      <button class="btn ghost" id="bk-archives">Consulter les archives</button>
+    </div>
+  </div>`:""}
   <div class="infobox">⚙️ Les paramètres fiscaux (TVA, NINEA), la fidélité et les coordonnées de l'entreprise sont désormais dans l'onglet <b>Paramètres</b>.</div>`;
 }
 
 /* ================== MODALE ================== */
-function openModal(html){ modalContent = html; el("modal").innerHTML = `<div class="modalbg" id="modalbg"><div class="modal">${html}</div></div>`;
+function openModal(html){ modalContent = html; savedDuringModal = false; el("modal").innerHTML = `<div class="modalbg" id="modalbg"><div class="modal">${html}</div></div>`;
   el("modalbg").onclick = e=>{ if(e.target.id==="modalbg") closeModal(); }; }
-function closeModal(){ modalContent=null; el("modal").innerHTML=""; }
+function closeModal(){
+  modalContent=null; el("modal").innerHTML="";
+  if(pendingRemoteBlob){
+    const b=pendingRemoteBlob; pendingRemoteBlob=null; hideSyncBanner();
+    if(savedDuringModal){ toast("⚠ Un autre utilisateur a aussi enregistré pendant votre saisie — vérifiez les données."); }
+    else { applyRemoteBlob(b); }
+  }
+  savedDuringModal=false;
+}
 window.closeModal = closeModal;
 
 /* ===== Confirmation réutilisable (2e couche au-dessus des modales) ===== */
@@ -1710,6 +1971,7 @@ function openOrderDetail(id){
       ${!o.delivered&&o.status!=="cancelled"&&can("orders_deliver")?`<button class="btn b" data-md-deliver="${o.id}">Livrer</button>`:""}
       ${o.status!=="cancelled"&&can("orders_edit")?`<button class="btn ghost" data-md-edit="${o.id}">Modifier</button>`:""}
       <button class="btn ghost" data-md-receipt="${o.id}">Reçu / imprimer</button>
+      <button class="btn" style="background:var(--vert)" data-md-bl="${o.id}">🚚 Bon de livraison${o.blNum?" ("+esc(o.blNum)+")":""}</button>
       <button class="btn b" data-md-invoice="${o.id}">📄 Facture</button>
       <button class="btn ghost" data-md-invpdf="${o.id}">⬇ PDF</button>
       ${due>0&&o.invoiceNum?`<span class="muted" style="align-self:center;font-size:13px">💰 Encaissement à la Caisse</span>`:""}
@@ -1724,6 +1986,7 @@ function openOrderDetail(id){
   };
   if(q("[data-md-edit]")) q("[data-md-edit]").onclick=()=>{ closeModal(); startEditOrder(o.id); };
   if(q("[data-md-receipt]")) q("[data-md-receipt]").onclick=()=>{ printHTML(orderReceiptHTML(o)); };
+  if(q("[data-md-bl]")) q("[data-md-bl]").onclick=async ()=>{ await issueDeliveryNote(o.id); };
   if(q("[data-md-invoice]")) q("[data-md-invoice]").onclick=async ()=>{ assignInvoiceNum(o); await save(); closeModal(); render(); toast("Facture "+o.invoiceNum+" générée ✓ — encaissement à la Caisse"); printHTML(invoiceHTML(o)); };
   if(q("[data-md-invpdf]")) q("[data-md-invpdf]").onclick=async ()=>{ assignInvoiceNum(o); await save(); downloadInvoicePDF(o); };
   if(q("[data-md-cancelinv]")) q("[data-md-cancelinv]").onclick=()=> cancelInvoice(o.id);
@@ -3390,14 +3653,14 @@ function parseImport(text){
     const name = parts[0]; if(!name) return;
     // ignore une éventuelle ligne d'en-tête
     if(/^(nom|produit|désignation|designation)$/i.test(name)) return;
-    rows.push({ name, family:normalizeFamily(parts[1]), cost:parseNum(parts[2]), price:parseNum(parts[3]), stock:parseNum(parts[4]), alert: parts[5]!==undefined&&parts[5]!==""?parseNum(parts[5]):20 });
+    rows.push({ name, family:normalizeFamily(parts[1]), cost:parseNum(parts[2]), price:parseNum(parts[3]), stock:parseNum(parts[4]), alert: parts[5]!==undefined&&parts[5]!==""?parseNum(parts[5]):20, img: (parts[6]!==undefined && /^https?:/i.test(parts[6].trim()))?parts[6].trim():null });
   });
   return rows;
 }
 function openImportProducts(){
   openModal(`
     <h3>Importer une liste de produits</h3>
-    <p class="muted" style="font-size:13px;margin-top:0">Colle une liste (depuis Excel, Google Sheets ou un tableau). Une ligne par produit, colonnes dans cet ordre :<br><b>Nom · Famille · Coût · Prix · Stock · Seuil</b> (séparés par tabulation, point-virgule ou virgule). Seul le <b>Nom</b> est obligatoire.</p>
+    <p class="muted" style="font-size:13px;margin-top:0">Colle une liste (depuis Excel, Google Sheets ou un tableau). Une ligne par produit, colonnes dans cet ordre :<br><b>Nom · Famille · Coût · Prix · Stock · Seuil · Image (URL)</b> (séparés par tabulation, point-virgule ou virgule). Seul le <b>Nom</b> est obligatoire ; l'image (lien) est facultative.</p>
     <textarea id="imp-text" rows="9" style="width:100%;font-family:monospace;font-size:12.5px" placeholder="Gobelet carton 25cl (carton 1000)	Restauration	9500	12500	0	20
 Sac poubelle 100L (rouleau x10)	Hygiène	1800	2600	0	30"></textarea>
     <div class="row" style="margin-top:10px;justify-content:space-between">
@@ -3410,14 +3673,14 @@ Sac poubelle 100L (rouleau x10)	Hygiène	1800	2600	0	30"></textarea>
     parsed=parseImport(el("imp-text").value);
     if(!parsed.length){ el("imp-result").innerHTML=`<p class="muted">Aucune ligne détectée. Vérifie le format.</p>`; el("imp-go").style.display="none"; return; }
     el("imp-result").innerHTML=`<div class="tablewrap" style="max-height:240px;overflow:auto"><table style="font-size:12.5px">
-      <tr><th>Nom</th><th>Famille</th><th class="num">Coût</th><th class="num">Prix</th><th class="num">Stock</th><th class="num">Seuil</th></tr>
-      ${parsed.map(p=>`<tr><td>${esc(p.name)}</td><td class="muted">${esc(p.family)}</td><td class="num">${fmt(p.cost)}</td><td class="num">${fmt(p.price)}</td><td class="num">${p.stock}</td><td class="num">${p.alert}</td></tr>`).join("")}
+      <tr><th></th><th>Nom</th><th>Famille</th><th class="num">Coût</th><th class="num">Prix</th><th class="num">Stock</th><th class="num">Seuil</th></tr>
+      ${parsed.map(p=>`<tr><td>${p.img?`<img src="${esc(p.img)}" style="width:28px;height:28px;object-fit:cover;border-radius:5px" onerror="this.style.display='none'">`:""}</td><td>${esc(p.name)}</td><td class="muted">${esc(p.family)}</td><td class="num">${fmt(p.cost)}</td><td class="num">${fmt(p.price)}</td><td class="num">${p.stock}</td><td class="num">${p.alert}</td></tr>`).join("")}
     </table></div><p class="muted" style="font-size:12px">${parsed.length} produit(s) prêt(s) à importer. Les familles ont été reconnues automatiquement — vérifie qu'elles sont correctes.</p>`;
     el("imp-go").style.display="";
   };
   el("imp-go").onclick=async ()=>{
     if(!parsed.length) return;
-    parsed.forEach(p=> S.products.push({ id:nid(), name:p.name, family:p.family, cost:p.cost, price:p.price, stock:p.stock, alert:p.alert, img:null }));
+    parsed.forEach(p=> S.products.push({ id:nid(), name:p.name, family:p.family, cost:p.cost, price:p.price, stock:p.stock, alert:p.alert, img:p.img||null }));
     log("Import catalogue : "+parsed.length+" produits");
     await save(); closeModal(); render(); toast(parsed.length+" produits importés ✓");
   };
@@ -3428,7 +3691,7 @@ function render(){
   if (!S.users.length) { root.innerHTML = vSetup(); bindSetup(); return; }
   if (!session || !me()) { root.innerHTML = vLogin(); bindLogin(); return; }
   if (isMobileG()) { return renderMobileG(); }
-  const views = {dash:vDash, weborders:vWebOrders, messages:vMessages, orders:vOrders, invoices:vInvoices, clients:vClients, products:vProducts, suppliers:vSuppliers, logistics:vLogistics, cash:vCash, accounting:vAccounting, control:vControl, marketing:vMarketing, hr:vHR, monitoring:vMonitoring, users:vUsers, settings:vSettings, backup:vBackup};
+  const views = {dash:vDash, weborders:vWebOrders, messages:vMessages, quotes:vQuotes, orders:vOrders, invoices:vInvoices, clients:vClients, products:vProducts, suppliers:vSuppliers, logistics:vLogistics, cash:vCash, accounting:vAccounting, control:vControl, marketing:vMarketing, hr:vHR, monitoring:vMonitoring, users:vUsers, settings:vSettings, backup:vBackup};
   const guard = {weborders:"orders_create", cash:"cash_view", suppliers:"suppliers", accounting:"accounting", control:"control", logistics:"logistics", marketing:"marketing", hr:"hr", monitoring:"monitoring"};
   if (guard[tab] && !can(guard[tab])) tab="dash";
   if ((tab==="users"||tab==="backup"||tab==="settings") && !isAdmin()) tab = "dash";
@@ -3442,17 +3705,19 @@ function render(){
   if (tab==="messages") setTimeout(bindMessages, 20);
   if (tab==="invoices") setTimeout(bindInvoices, 20);
   setTimeout(refreshWebBadge, 20);
+  updateDbBanner();
 }
 
 /* ============ INTERFACE MOBILE DÉDIÉE (vraie app) ============ */
 function isMobileG(){ return window.matchMedia && window.matchMedia("(max-width: 760px)").matches; }
-const MG_LABELS = {dash:"Tableau de bord",weborders:"Commandes web",messages:"Messages",orders:"Commandes",invoices:"Factures",clients:"Clients",products:"Produits & Stock",suppliers:"Fournisseurs",logistics:"Logistique",cash:"Caisse",accounting:"Comptabilité",control:"Contrôle de gestion",marketing:"Marketing",hr:"Ressources humaines",monitoring:"Monitoring",users:"Utilisateurs",settings:"Paramètres",backup:"Sauvegarde"};
+const MG_LABELS = {dash:"Tableau de bord",weborders:"Commandes web",messages:"Messages",quotes:"Devis",orders:"Commandes",invoices:"Factures",clients:"Clients",products:"Produits & Stock",suppliers:"Fournisseurs",logistics:"Logistique",cash:"Caisse",accounting:"Comptabilité",control:"Contrôle de gestion",marketing:"Marketing",hr:"Ressources humaines",monitoring:"Monitoring",users:"Utilisateurs",settings:"Paramètres",backup:"Sauvegarde"};
 function mgIco(name){
   const P={dash:'<rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/>',
     orders:'<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"/>',
     weborders:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/>',
     messages:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     invoices:'<path d="M6 2h9l5 5v15H6zM14 2v6h6"/>',
+    quotes:'<path d="M6 2h9l5 5v15H6zM14 2v6h6M9 13h6M9 17h4"/>',
     clients:'<circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6M17 11a4 4 0 0 0 0-7"/>',
     products:'<path d="M21 16V8l-9-5-9 5v8l9 5 9-5zM3 8l9 5 9-5M12 13v9"/>',
     suppliers:'<rect x="1" y="3" width="15" height="13"/><path d="M16 8h4l3 3v5h-7zM5 21a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM18 21a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/>',
@@ -3472,8 +3737,8 @@ function mgIco(name){
 }
 function mgAllowed(){
   // sections accessibles selon les permissions, dans l'ordre
-  const order=["dash","weborders","messages","orders","invoices","clients","products","suppliers","logistics","cash","accounting","control","marketing","hr","monitoring","users","settings","backup"];
-  const guard = {weborders:"orders_create", cash:"cash_view", suppliers:"suppliers", accounting:"accounting", control:"control", logistics:"logistics", marketing:"marketing", hr:"hr", monitoring:"monitoring"};
+  const order=["dash","weborders","messages","quotes","orders","invoices","clients","products","suppliers","logistics","cash","accounting","control","marketing","hr","monitoring","users","settings","backup"];
+  const guard = {weborders:"orders_create", quotes:"orders_create", cash:"cash_view", suppliers:"suppliers", accounting:"accounting", control:"control", logistics:"logistics", marketing:"marketing", hr:"hr", monitoring:"monitoring"};
   return order.filter(k=>{
     if(["users","settings","backup"].includes(k)) return isAdmin();
     if(guard[k]) return can(guard[k]);
@@ -3485,9 +3750,9 @@ function mgTabLabel(k){ return {dash:"Accueil",orders:"Commandes",invoices:"Fact
 function renderMobileG(){
   const root=el("root");
   const onHome = tab==="dash";
-  const views = {dash:vDash, weborders:vWebOrders, messages:vMessages, orders:vOrders, invoices:vInvoices, clients:vClients, products:vProducts, suppliers:vSuppliers, logistics:vLogistics, cash:vCash, accounting:vAccounting, control:vControl, marketing:vMarketing, hr:vHR, monitoring:vMonitoring, users:vUsers, settings:vSettings, backup:vBackup};
+  const views = {dash:vDash, weborders:vWebOrders, messages:vMessages, quotes:vQuotes, orders:vOrders, invoices:vInvoices, clients:vClients, products:vProducts, suppliers:vSuppliers, logistics:vLogistics, cash:vCash, accounting:vAccounting, control:vControl, marketing:vMarketing, hr:vHR, monitoring:vMonitoring, users:vUsers, settings:vSettings, backup:vBackup};
   // garde de permission
-  const guard = {weborders:"orders_create", cash:"cash_view", suppliers:"suppliers", accounting:"accounting", control:"control", logistics:"logistics", marketing:"marketing", hr:"hr", monitoring:"monitoring"};
+  const guard = {weborders:"orders_create", quotes:"orders_create", cash:"cash_view", suppliers:"suppliers", accounting:"accounting", control:"control", logistics:"logistics", marketing:"marketing", hr:"hr", monitoring:"monitoring"};
   if (guard[tab] && !can(guard[tab])) tab="dash";
   if ((tab==="users"||tab==="backup"||tab==="settings") && !isAdmin()) tab="dash";
   root.innerHTML = `
@@ -3518,6 +3783,7 @@ function renderMobileG(){
     if (tab==="invoices") setTimeout(bindInvoices, 20);
   }
   setTimeout(refreshWebBadge, 20);
+  updateDbBanner();
 }
 function mgLogoSvg(){ return `<svg width="30" height="30" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#C85E2D"/><text x="32" y="44" font-family="Arial" font-size="34" font-weight="bold" fill="#F5F1E8" text-anchor="middle">D</text><rect x="20" y="49" width="24" height="4" rx="2" fill="#0F2A4A"/></svg>`; }
 function vMobileHomeG(){
@@ -3690,7 +3956,8 @@ function bindApp(){
   const pAdd = el("p-add");
   if(pAdd) pAdd.onclick = async ()=>{
     const name = el("p-name").value.trim(); if(!name) return toast("Nom du produit requis");
-    S.products.push({ id:nid(), name, family:el("p-fam").value, cost:+el("p-cost").value||0, price:+el("p-price").value||0, stock:+el("p-stock").value||0, alert:+el("p-alert").value||0, img:pendingImg||null });
+    const imgUrl = (el("p-imgurl")&&el("p-imgurl").value.trim())||"";
+    S.products.push({ id:nid(), name, family:el("p-fam").value, cost:+el("p-cost").value||0, price:+el("p-price").value||0, stock:+el("p-stock").value||0, alert:+el("p-alert").value||0, img: pendingImg || imgUrl || null });
     log("Produit créé : "+name);
     await save(); render(); toast("Produit ajouté ✓");
   };
@@ -3704,6 +3971,20 @@ function bindApp(){
       try{ const img=await compressImage(f,500,.72); const p=S.products.find(p=>p.id===id); p.img=img; log("Photo mise à jour : "+p.name); await save(); render(); toast("Photo enregistrée ✓"); }
       catch(err){ toast("Image invalide"); } };
     inp.click();
+  });
+  // définir/coller un LIEN image (URL) sur un produit existant
+  document.querySelectorAll("[data-pimgurl]").forEach(b=> b.onclick = ()=>{
+    const id=+b.dataset.pimgurl; const p=S.products.find(p=>p.id===id);
+    const cur = (p.img && /^https?:/i.test(p.img)) ? p.img : "";
+    openModal(`<h3>Lien image — ${esc(p.name)}</h3>
+      <label>Adresse de l'image (URL)</label>
+      <input id="pu-url" value="${esc(cur)}" placeholder="https://…">
+      <div id="pu-prev" style="margin-top:10px">${p.img?`<img src="${esc(p.img)}" style="max-height:120px;border-radius:8px">`:""}</div>
+      <span class="muted" style="font-size:12px">Colle l'adresse d'une image en ligne (clic droit sur une image → « Copier l'adresse de l'image »). Laisse vide pour retirer.</span>
+      <div class="row" style="margin-top:12px;justify-content:flex-end"><button class="btn ghost" onclick="closeModal()">Annuler</button><button class="btn" id="pu-save">Enregistrer</button></div>`);
+    const prev=el("pu-prev"), url=el("pu-url");
+    url.oninput=()=>{ const v=url.value.trim(); prev.innerHTML = v?`<img src="${esc(v)}" style="max-height:120px;border-radius:8px" onerror="this.style.display='none'">`:""; };
+    el("pu-save").onclick=async ()=>{ const v=url.value.trim(); p.img = v||null; log("Lien image : "+p.name); await save(); closeModal(); render(); toast(v?"Image liée ✓":"Image retirée"); };
   });
   document.querySelectorAll("[data-rcv]").forEach(b=> b.onclick = async ()=>{
     const id=+b.dataset.rcv, q=+el("rcv-"+id).value;
@@ -3814,6 +4095,30 @@ function bindApp(){
     };
   }
   const oCancelEdit = el("o-canceledit"); if(oCancelEdit) oCancelEdit.onclick = ()=>{ editOrder=null; draft=null; render(); };
+
+  /* ===== Devis ===== */
+  if(el("q-save") || el("q-addline")){
+    const qc=el("q-client"); if(qc) qc.onchange=e=>{ quoteDraft.clientId=+e.target.value; };
+    const qd=el("q-date"); if(qd) qd.onchange=e=>{ quoteDraft.date=e.target.value; };
+    const qv=el("q-valid"); if(qv) qv.onchange=e=>{ quoteDraft.validity=e.target.value; };
+    const qt=el("q-tva"); if(qt) qt.onchange=e=>{ quoteDraft.tvaApplicable = e.target.value==="1"; };
+    const qa=el("q-addline"); if(qa) qa.onclick=()=>{ const p=S.products[0]; quoteDraft.lines.push({productId:p.id, qty:1, price:p.price}); render(); };
+    document.querySelectorAll("[data-qlprod]").forEach(s=> s.onchange=e=>{ const i=+s.dataset.qlprod, p=S.products.find(p=>p.id===+e.target.value); quoteDraft.lines[i].productId=p.id; quoteDraft.lines[i].price=p.price; render(); });
+    document.querySelectorAll("[data-qlqty]").forEach(inp=> inp.onchange=()=>{ quoteDraft.lines[+inp.dataset.qlqty].qty=Math.max(1,+inp.value||1); render(); });
+    document.querySelectorAll("[data-qlprice]").forEach(inp=> inp.onchange=()=>{ quoteDraft.lines[+inp.dataset.qlprice].price=Math.max(0,+inp.value||0); render(); });
+    document.querySelectorAll("[data-qlrm]").forEach(b=> b.onclick=()=>{ quoteDraft.lines.splice(+b.dataset.qlrm,1); render(); });
+    const qs=el("q-save"); if(qs) qs.onclick=async ()=>{
+      if(!quoteDraft.lines.length) return;
+      const num="DEV-"+String(S.quoteSeq++).padStart(4,"0");
+      S.quotes.push({ id:nid(), num, date:quoteDraft.date, validity:quoteDraft.validity, clientId:quoteDraft.clientId, lines:quoteDraft.lines.map(l=>({...l})), tvaApplicable:quoteDraft.tvaApplicable!==false, status:"en attente", createdBy:me().name });
+      log("Devis créé : "+num+" — "+clientName(quoteDraft.clientId)+" ("+fmt(quoteTotal(quoteDraft))+")");
+      quoteDraft=null; await save(); render(); toast("Devis "+num+" enregistré ✓");
+    };
+  }
+  document.querySelectorAll("[data-qpdf]").forEach(b=> b.onclick=()=>{ const q=S.quotes.find(x=>x.id===+b.dataset.qpdf); if(q) downloadQuotePDF(q); });
+  document.querySelectorAll("[data-qconv]").forEach(b=> b.onclick=()=> convertQuoteToOrder(+b.dataset.qconv));
+  document.querySelectorAll("[data-qaccept]").forEach(b=> b.onclick=async ()=>{ const q=S.quotes.find(x=>x.id===+b.dataset.qaccept); if(q){ q.status="accepté"; await save(); render(); toast("Devis marqué accepté ✓"); } });
+  document.querySelectorAll("[data-qdel]").forEach(b=> b.onclick=()=>{ const id=+b.dataset.qdel; const q=S.quotes.find(x=>x.id===id); confirmAction({title:"Supprimer le devis", message:`Supprimer le devis <b>${esc(q.num)}</b> ?`, okLabel:"Supprimer", danger:true}, async ()=>{ S.quotes=S.quotes.filter(x=>x.id!==id); await save(); render(); toast("Devis supprimé"); }); });
 
   // Modifier une commande
   document.querySelectorAll("[data-oedit]").forEach(b=> b.onclick = ()=>{ startEditOrder(+b.dataset.oedit); });
@@ -4239,6 +4544,8 @@ function bindApp(){
       S={version:9, users:[], products:[], clients:[], orders:[], expenses:[], suppliers:[], purchases:[], campaigns:[], employees:[], announcements:[], promos:[], objectives:{}, settings:{tvaRate:18,tvaEnabled:true,pricesTTC:true,ninea:"",rccm:"",loyaltyEnabled:true,loyaltyRate:1,loyaltyPer:1000}, logs:[], seq:1, orderSeq:1, poSeq:1, invoiceSeq:1, clientSeq:1};
       session=null; await save(); await saveSession(); render();
     };
+    const bkArch=el("bk-archive"); if(bkArch) bkArch.onclick=()=> archiveOrders(el("bk-arch-date").value);
+    const bkArchs=el("bk-archives"); if(bkArchs) bkArchs.onclick=()=> openArchives();
   }
 }
 
