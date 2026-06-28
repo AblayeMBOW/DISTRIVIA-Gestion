@@ -40,7 +40,7 @@
   nav button{flex:0 0 auto; padding:11px 16px; background:none; border:none; color:#C9D4E2; font-weight:600; font-size:13px; cursor:pointer; border-bottom:3px solid transparent; white-space:nowrap;}
   nav button.active{color:#fff; border-bottom-color:var(--terra); background:rgba(255,255,255,.05);}
   .navbadge{display:inline-block; min-width:18px; height:18px; line-height:18px; padding:0 5px; margin-left:6px; background:var(--terra); color:#fff; border-radius:9px; font-size:11px; font-weight:800; text-align:center; vertical-align:middle;}
-  main{max-width:1100px; margin:0 auto; padding:16px;}
+  main{max-width:1500px; margin:0 auto; padding:16px;}
   h2{color:var(--bleu); font-size:19px; margin:6px 0 12px;}
   h3{color:var(--terra); font-size:13.5px; margin:14px 0 8px; text-transform:uppercase; letter-spacing:1px;}
   .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:16px;}
@@ -85,6 +85,46 @@
   .total{font-size:17px; font-weight:800; color:var(--bleu); text-align:right; margin-top:8px;}
   .muted{color:var(--gris); font-size:12px;}
   .tablewrap{overflow-x:auto;}
+  /* ===================== VAGUE 4 : FICHES PLEIN ÉCRAN (style NetSuite) ===================== */
+  .recpage{max-width:100%;}
+  .rectoolbar{display:flex; align-items:center; gap:14px; flex-wrap:wrap; background:#fff; border:1px solid #E4DECE; border-radius:12px; padding:11px 16px; box-shadow:0 1px 5px rgba(15,42,74,.08); margin-bottom:16px; position:sticky; top:0; z-index:18;}
+  .rectoolbar-l{display:flex; align-items:center; gap:12px; flex-wrap:wrap; min-width:0;}
+  .rectoolbar-r{margin-left:auto; display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  .recback{display:inline-flex; align-items:center; gap:5px; background:#EDE7DA; color:var(--bleu); border:none; border-radius:8px; padding:8px 13px; font-weight:700; font-size:13px; cursor:pointer; text-decoration:none; white-space:nowrap;}
+  .recback:hover{background:#e1d9c5;}
+  .rectitle{display:flex; flex-direction:column; gap:1px; min-width:0;}
+  .rectitle-main{font-size:20px; font-weight:800; color:var(--bleu); line-height:1.15; letter-spacing:.2px;}
+  .rectitle-sub{font-size:12.5px; color:var(--gris);}
+  .recstatus{display:inline-block; padding:5px 13px; border-radius:20px; font-size:11.5px; font-weight:800; letter-spacing:.5px; text-transform:uppercase; color:#fff; background:var(--gris); white-space:nowrap;}
+  .recstatus.ok{background:var(--vert);} .recstatus.warn{background:var(--terra);} .recstatus.bad{background:var(--rouge);} .recstatus.info{background:var(--bleu);}
+  .recactions{display:flex; gap:8px; flex-wrap:wrap;}
+  .reclink{display:inline-flex; align-items:center; gap:5px; background:transparent; color:var(--bleu); border:1px solid #D6CEB8; border-radius:8px; padding:7px 11px; font-weight:700; font-size:12.5px; cursor:pointer; text-decoration:none; white-space:nowrap;}
+  .reclink:hover{background:var(--creme);}
+  .recbody{display:grid; grid-template-columns:1fr 340px; gap:16px; align-items:start;}
+  @media(max-width:1000px){ .recbody{grid-template-columns:1fr;} }
+  .reccard{background:#fff; border:1px solid #E8E2D2; border-radius:12px; box-shadow:0 1px 4px rgba(15,42,74,.07); margin-bottom:16px; overflow:hidden;}
+  .reccard-h{display:flex; align-items:center; gap:8px; padding:12px 16px; background:#F0EBDF; cursor:pointer; user-select:none; font-weight:800; color:var(--bleu); font-size:13.5px; letter-spacing:.3px;}
+  .reccard-h .chev{margin-left:auto; transition:transform .18s ease; color:var(--terra); font-size:12px;}
+  .reccard.collapsed .reccard-h .chev{transform:rotate(-90deg);}
+  .reccard-b{padding:16px;}
+  .reccard.collapsed .reccard-b{display:none;}
+  .recgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:14px 24px;}
+  .recfield{display:flex; flex-direction:column; gap:3px; min-width:0;}
+  .reclbl{font-size:10.5px; font-weight:700; letter-spacing:.7px; text-transform:uppercase; color:var(--gris);}
+  .recval{font-size:14.5px; color:var(--anthra); font-weight:500; word-break:break-word;}
+  .recside .recsum{position:sticky; top:78px;}
+  .recsum{background:#fff; border:1px solid #E8E2D2; border-radius:12px; box-shadow:0 1px 4px rgba(15,42,74,.07); overflow:hidden;}
+  .recsum-h{background:var(--bleu); color:#fff; padding:11px 16px; font-weight:800; font-size:12.5px; letter-spacing:.5px; text-transform:uppercase;}
+  .recsum-b{padding:6px 16px 14px;}
+  .recsum-row{display:flex; justify-content:space-between; align-items:baseline; gap:12px; padding:9px 0; border-bottom:1px solid #F0EBDF; font-size:14px;}
+  .recsum-row:last-child{border-bottom:none;}
+  .recsum-row .k{color:var(--gris);}
+  .recsum-row .val{font-weight:700; color:var(--anthra); text-align:right; white-space:nowrap;}
+  .recsum-row.total{font-size:16.5px;} .recsum-row.total .val{color:var(--bleu); font-weight:800;}
+  .recsum-row.due .val{color:var(--terra); font-weight:800;}
+  .recsum-row.paid .val{color:var(--vert);}
+  @media(max-width:760px){ .rectoolbar{position:static;} .recside .recsum{position:static;} .rectitle-main{font-size:17px;} .recbody{gap:0;} }
+
   .searchwrap{position:relative; margin-bottom:14px;}
   .searchwrap input{padding:12px 14px; font-size:15px; border-radius:9px; border:2px solid #D8D2C4;}
   .perms{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:4px 14px; margin-top:6px;}
@@ -403,6 +443,7 @@ const store = {
 /* ================== ÉTAT ================== */
 let S = { version:9, users:[], products:[], clients:[], orders:[], expenses:[], suppliers:[], purchases:[], campaigns:[], employees:[], announcements:[], promos:[], objectives:{}, settings:{tvaRate:18,tvaEnabled:true,pricesTTC:true,ninea:"",rccm:"",loyaltyEnabled:true,loyaltyRate:1,loyaltyPer:1000}, logs:[], seq:1, orderSeq:1, poSeq:1, invoiceSeq:1, clientSeq:1 };
 let session = null;      // {userId}
+let route   = null;      // {type,id} fiche plein écran (Vague 4)
 let tab = "dash";
 let draft = null;
 let editUserId = null;
@@ -1436,7 +1477,7 @@ function vQuotes(){
   <div class="tablewrap"><table>
     <tr><th>N°</th><th>Date</th><th>Client</th><th class="num">Total</th><th>Validité</th><th>Statut</th><th></th></tr>
     ${list.length? list.map(q=>`<tr>
-      <td><b>${esc(q.num)}</b></td><td>${frDate(q.date)}</td><td>${esc(clientName(q.clientId))}</td>
+      <td><b><a href="${recordHref('quote',q.id)}" style="color:var(--bleu);text-decoration:underline;cursor:pointer">${esc(q.num)}</a></b></td><td>${frDate(q.date)}</td><td>${esc(clientName(q.clientId))}</td>
       <td class="num">${fmt(quoteTotal(q))}</td><td class="${q.validity&&q.validity<today()&&q.status!=='converti'?'':''}" style="${q.validity&&q.validity<today()&&q.status!=='converti'?'color:var(--rouge)':''}">${q.validity?frDate(q.validity):"—"}</td>
       <td>${badge(q.status)}</td>
       <td class="row" style="gap:4px">
@@ -2029,7 +2070,364 @@ function cancelOrderWithReason(orderId){
   };
 }
 window.cancelOrderWithReason = cancelOrderWithReason;
+/* ===================== VAGUE 4 : FICHES PLEIN ÉCRAN (style NetSuite) ===================== */
+const RECORD_TABS  = { client:"clients", order:"orders", invoice:"invoices", supplier:"suppliers", product:"products", quote:"quotes" };
+const RECBACK_LABEL = { clients:"Clients", orders:"Commandes", invoices:"Factures", quotes:"Devis", suppliers:"Fournisseurs", products:"Produits", cash:"Caisse", dash:"Accueil" };
+const RECGUARD = { supplier:"suppliers", quote:"orders_create" };
+
+function parseRoute(){
+  const h = (location.hash||"").replace(/^#/,"");
+  const m = h.match(/^fiche\/([a-z]+)\/(.+)$/);
+  if(!m) return null;
+  const type = m[1]; const id = decodeURIComponent(m[2]);
+  if(!(type in RECORD_TABS)) return null;
+  return { type, id };
+}
+function recordHref(type, id){ return "#fiche/"+type+"/"+encodeURIComponent(id); }
+function goRecord(type, id){
+  const href = recordHref(type, id);
+  if(location.hash === href){ render(); }      // déjà dessus : rafraîchir
+  else location.hash = href;                    // déclenche hashchange -> render
+}
+function exitRecord(){
+  route = null;
+  if(location.hash){ try{ history.replaceState(null,"",location.pathname+location.search); }catch(e){ location.hash=""; } }
+}
+window.addEventListener("hashchange", ()=>{
+  if(!S.users.length || !session || !me()) return;
+  render();
+});
+
+/* --- coquille commune d'une fiche --- */
+function recSumRows(rows){ return (rows||[]).map(r=>`<div class="recsum-row ${r.cls||""}"><span class="k">${r.k}</span><span class="val">${r.v}</span></div>`).join(""); }
+function recShell(o){
+  // o = {type, id, title, sub(html), status:{label,kind}, actions:[html], sections:[{title,html,collapsed}], summary:[{k,v,cls}], summaryTitle, backTab}
+  const backTab = o.backTab || RECORD_TABS[o.type] || "dash";
+  const backLabel = RECBACK_LABEL[backTab] || "Retour";
+  const href = recordHref(o.type, o.id);
+  const status = o.status ? `<span class="recstatus ${o.status.kind||""}">${esc(o.status.label)}</span>` : "";
+  const actions = (o.actions||[]).join("");
+  const sections = (o.sections||[]).map((s,i)=>`
+    <div class="reccard ${s.collapsed?"collapsed":""}">
+      <div class="reccard-h" data-sectoggle>${esc(s.title)}<span class="chev">▼</span></div>
+      <div class="reccard-b">${s.html}</div>
+    </div>`).join("");
+  const summary = (o.summary&&o.summary.length) ? `
+    <aside class="recside">
+      <div class="recsum">
+        <div class="recsum-h">${esc(o.summaryTitle||"Synthèse")}</div>
+        <div class="recsum-b">${recSumRows(o.summary)}</div>
+      </div>
+    </aside>` : "";
+  return `<div class="recpage">
+    <div class="rectoolbar">
+      <div class="rectoolbar-l">
+        <button class="recback" data-recback="${backTab}">← ${esc(backLabel)}</button>
+        <div class="rectitle"><div class="rectitle-main">${esc(o.title)}</div>${o.sub?`<div class="rectitle-sub">${o.sub}</div>`:""}</div>
+        ${status}
+      </div>
+      <div class="rectoolbar-r">
+        <div class="recactions">${actions}</div>
+        <a class="reclink" href="${href}" target="_blank" rel="noopener" title="Ouvrir cette fiche dans un nouvel onglet">🗗 Nouvel onglet</a>
+        <button class="reclink" data-reccopy="${href}" title="Copier le lien de cette fiche">🔗 Lien</button>
+      </div>
+    </div>
+    <div class="recbody">
+      <div class="recmain">${sections}</div>
+      ${summary}
+    </div>
+  </div>`;
+}
+
+function renderRecordPage(r){
+  if(RECGUARD[r.type] && !can(RECGUARD[r.type])){
+    return `<div class="recpage"><div class="rectoolbar"><div class="rectoolbar-l"><button class="recback" data-recback="dash">← Accueil</button><div class="rectitle"><div class="rectitle-main">Accès non autorisé</div></div></div></div><div class="reccard"><div class="reccard-b empty">Vous n'avez pas la permission de consulter cette fiche.</div></div></div>`;
+  }
+  let html = null;
+  if(r.type==="client") html = recClientPage(r.id);
+  else if(r.type==="order"||r.type==="invoice") html = recOrderPage(r.id);
+  else if(r.type==="supplier") html = recSupplierPage(r.id);
+  else if(r.type==="product") html = recProductPage(r.id);
+  else if(r.type==="quote") html = recQuotePage(r.id);
+  if(html==null){
+    return `<div class="recpage"><div class="rectoolbar"><div class="rectoolbar-l"><button class="recback" data-recback="${RECORD_TABS[r.type]||"dash"}">← Retour</button><div class="rectitle"><div class="rectitle-main">Fiche introuvable</div></div></div></div><div class="reccard"><div class="reccard-b empty">Cet enregistrement n'existe pas ou a été supprimé.</div></div></div>`;
+  }
+  return html;
+}
+
+/* --- COMMANDE / FACTURE --- */
+function recOrderPage(id){
+  const o = S.orders.find(o=>o.id===+id); if(!o) return null;
+  const c = S.clients.find(c=>c.id===o.clientId)||{};
+  const due = orderDue(o), paid = orderPaid(o), total = orderTotal(o);
+  const overdue = o.payMode==="credit" && o.dueDate && due>0 && o.dueDate<today();
+  const isInv = !!o.invoiceNum;
+  let st;
+  if(o.status==="cancelled") st={label:"Annulée", kind:"bad"};
+  else if(isInv && due<=0) st={label:"Payée", kind:"ok"};
+  else if(isInv && paid>0) st={label:"Partielle", kind:"warn"};
+  else if(isInv) st={label:"Impayée", kind:"bad"};
+  else if(o.delivered) st={label:"Livrée", kind:"info"};
+  else st={label:"À livrer", kind:"warn"};
+
+  const lignes = o.lines.map(l=>`<tr><td>${esc(prodName(l.productId))}</td><td class="num">${l.qty}</td><td class="num">${fmt(l.price)}</td><td class="num">${fmt(l.qty*l.price)}</td></tr>`).join("");
+  const pays = (o.payments||[]).length ? o.payments.map(p=>`<tr><td>${p.date}</td><td>${esc(p.method||"—")}</td><td class="muted">${esc(p.by||"")}</td><td class="num" style="color:var(--vert)">${fmt(p.amount)}</td><td>${can("orders_pay")?`<button class="del" data-cancelpay="${p.id}" title="Annuler ce versement">✕</button>`:""}</td></tr>`).join("") : `<tr><td colspan="5" class="empty">Aucun versement.</td></tr>`;
+
+  const infoSection = `<div class="recgrid">
+    <div class="recfield"><div class="reclbl">Client</div><div class="recval"><a href="${recordHref("client",o.clientId)}" style="color:var(--bleu);font-weight:700;text-decoration:none">${esc(c.name||"—")}</a></div></div>
+    <div class="recfield"><div class="reclbl">Téléphone</div><div class="recval">${esc(fullPhone(c)||"—")}</div></div>
+    <div class="recfield"><div class="reclbl">Zone</div><div class="recval">${esc(c.zone||"—")}</div></div>
+    <div class="recfield"><div class="reclbl">Date</div><div class="recval">${o.date||"—"}</div></div>
+    <div class="recfield"><div class="reclbl">Paiement</div><div class="recval">${o.payMode==="credit"?("Crédit"+(o.dueDate?" · éch. "+o.dueDate:"")):"Comptant"} ${overdue?'<span class="badge alert">échue</span>':""}</div></div>
+    <div class="recfield"><div class="reclbl">Livraison</div><div class="recval">${o.delivered?("Livrée"+(o.deliveredDate?" le "+o.deliveredDate:"")+(o.deliveredBy?" · "+esc(o.deliveredBy):"")):"Non livrée"}</div></div>
+    ${isInv?`<div class="recfield"><div class="reclbl">N° de facture</div><div class="recval"><b style="color:var(--bleu)">${esc(o.invoiceNum)}</b></div></div>`:""}
+    ${o.blNum?`<div class="recfield"><div class="reclbl">Bon de livraison</div><div class="recval">${esc(o.blNum)}</div></div>`:""}
+    ${o.status==="cancelled"&&o.cancelReason?`<div class="recfield"><div class="reclbl">Motif d'annulation</div><div class="recval" style="color:var(--rouge)">${esc(o.cancelReason)}</div></div>`:""}
+  </div>`;
+  const linesSection = `<div class="tablewrap"><table><tr><th>Produit</th><th class="num">Qté</th><th class="num">P.U.</th><th class="num">Total</th></tr>${lignes}</table></div>`;
+  const paysSection = `<div class="tablewrap"><table><tr><th>Date</th><th>Moyen</th><th>Par</th><th class="num">Montant</th><th></th></tr>${pays}</table></div>${due>0&&isInv?`<p class="muted" style="margin-top:8px">💰 L'encaissement des versements se fait depuis la Caisse.</p>`:""}`;
+
+  const A=[];
+  if(!o.delivered&&o.status!=="cancelled"&&can("orders_deliver")) A.push(`<button class="btn b" data-md-deliver="${o.id}">Livrer</button>`);
+  if(o.status!=="cancelled"&&can("orders_edit")) A.push(`<button class="btn ghost" data-md-edit="${o.id}">✎ Modifier</button>`);
+  A.push(`<button class="btn ghost" data-md-receipt="${o.id}">🧾 Reçu</button>`);
+  A.push(`<button class="btn" style="background:var(--vert)" data-md-bl="${o.id}">🚚 Bon de livraison${o.blNum?" ("+esc(o.blNum)+")":""}</button>`);
+  A.push(`<button class="btn b" data-md-invoice="${o.id}">📄 Facture</button>`);
+  A.push(`<button class="btn ghost" data-md-invpdf="${o.id}">⬇ PDF</button>`);
+  if(o.invoiceNum&&orderPaid(o)===0&&can("orders_pay")) A.push(`<button class="btn ghost" style="color:var(--rouge)" data-md-cancelinv="${o.id}">Annuler facture</button>`);
+  if(o.status!=="cancelled"&&can("orders_cancel")) A.push(`<button class="btn" style="background:var(--rouge)" data-md-cancelorder="${o.id}">Annuler commande</button>`);
+
+  const sum=[];
+  if(orderTVA(o)>0){ sum.push({k:"Sous-total HT", v:fmt(orderHT(o))}); sum.push({k:"TVA ("+tvaRate()+" %)", v:fmt(orderTVA(o))}); }
+  sum.push({k:"Total TTC", v:fmt(total), cls:"total"});
+  sum.push({k:"Payé", v:fmt(paid), cls:"paid"});
+  sum.push({k:"Reste dû", v:fmt(due), cls:"due"});
+
+  const title = isInv ? ("Facture "+o.invoiceNum) : ("Commande "+o.num);
+  const sub = isInv ? ("Commande "+esc(o.num)+" · "+esc(clientName(o.clientId))) : esc(clientName(o.clientId));
+  return recShell({ type:"order", id:o.id, title, sub, status:st, actions:A, backTab:isInv?"invoices":"orders",
+    sections:[ {title:"Informations principales", html:infoSection}, {title:"Articles ("+o.lines.length+")", html:linesSection}, {title:"Versements ("+(o.payments||[]).length+")", html:paysSection} ],
+    summary:sum, summaryTitle:"Synthèse" });
+}
+
+/* --- CLIENT --- */
+function recClientPage(id){
+  const c = S.clients.find(c=>c.id===+id); if(!c) return null;
+  const co = S.orders.filter(o=>o.clientId===+id && o.status!=="cancelled").sort((a,b)=>b.id-a.id);
+  const delivered = co.filter(o=>o.delivered);
+  const caTotal = delivered.reduce((a,o)=>a+orderTotal(o),0);
+  const credit = delivered.reduce((a,o)=>a+orderDue(o),0);
+  const nbCmd = co.length;
+  const panier = delivered.length ? caTotal/delivered.length : 0;
+  const lastDate = co[0]?co[0].date:"—";
+  const overdue = co.filter(o=>o.payMode==="credit"&&o.dueDate&&orderDue(o)>0&&o.dueDate<today());
+  const rows = co.length? co.map(o=>`<tr style="cursor:pointer" data-rec-order="${o.id}"><td><b>${esc(o.num)}</b></td><td>${o.date}</td><td class="num">${fmt(orderTotal(o))}</td><td class="num">${orderDue(o)?'<span style="color:var(--terra)">'+fmt(orderDue(o))+'</span>':"—"}</td><td>${deliveryLabel(o)} ${payLabel(o)}</td></tr>`).join("") : `<tr><td colspan="5" class="empty">Aucune commande.</td></tr>`;
+
+  const canEditP = can("clients_edit")||can("clients_manage");
+  const cp = c.customPrices||{};
+  const keys = Object.keys(cp).filter(pid=>S.products.some(p=>p.id===+pid));
+  const cpRows = keys.map(pid=>{ const p=S.products.find(p=>p.id===+pid); const cat=+p.price||0; const net=+cp[pid]; const pct=cat?Math.round((cat-net)/cat*100):0; return `<tr><td>${esc(p.name)}</td><td class="num muted">${fmt(cat)}</td><td class="num"><b style="color:var(--vert)">${fmt(net)}</b></td><td class="num">${pct>0?"−"+pct+" %":(pct<0?"+"+(-pct)+" %":"—")}</td>${canEditP?`<td><button class="del" data-cp-rm="${pid}" title="Retirer">✕</button></td>`:""}</tr>`; }).join("");
+  const negSection = `${keys.length?`<div class="tablewrap"><table><tr><th>Produit</th><th class="num">Catalogue</th><th class="num">Prix négocié</th><th class="num">Écart</th>${canEditP?"<th></th>":""}</tr>${cpRows}</table></div>`:`<p class="muted" style="margin:0 0 6px">Aucun prix négocié.${canEditP?" Ajoutez-en un ci-dessous : il sera prioritaire sur la catégorie tarifaire pour ce client.":""}</p>`}
+    ${canEditP&&S.products.length?`<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px">
+      <select id="cp-prod" style="flex:1;min-width:220px">${S.products.map(p=>`<option value="${p.id}">${esc(p.name)} — catalogue ${fmt(p.price)}</option>`).join("")}</select>
+      <input id="cp-price" type="number" min="0" placeholder="Prix net (F)" style="width:160px">
+      <button class="btn sm b" id="cp-add">Définir</button>
+    </div>`:""}`;
+
+  const infoSection = `<div class="recgrid">
+    ${c.matricule?`<div class="recfield"><div class="reclbl">Matricule</div><div class="recval"><b style="color:var(--bleu)">${esc(c.matricule)}</b></div></div>`:""}
+    <div class="recfield"><div class="reclbl">Type</div><div class="recval">${esc(c.type||"—")}</div></div>
+    <div class="recfield"><div class="reclbl">Zone</div><div class="recval">${esc(c.zone||"—")}</div></div>
+    <div class="recfield"><div class="reclbl">Téléphone</div><div class="recval">${esc(fullPhone(c)||"—")}</div></div>
+    <div class="recfield"><div class="reclbl">Catégorie tarifaire</div><div class="recval"><span class="badge" style="background:var(--terra)">💳 ${esc(clientTariffLabel(c))}</span></div></div>
+    <div class="recfield"><div class="reclbl">Dernière commande</div><div class="recval">${lastDate}</div></div>
+  </div>
+  ${overdue.length?`<div class="alertbox" style="margin-top:12px">⏰ ${overdue.length} crédit(s) échu(s) : ${overdue.map(o=>esc(o.num)+" ("+fmt(orderDue(o))+")").join(", ")}</div>`:""}`;
+  const histSection = `<div class="tablewrap"><table><tr><th>N°</th><th>Date</th><th class="num">Total</th><th class="num">Dû</th><th>Statut</th></tr>${rows}</table></div>`;
+
+  const A=[];
+  if(can("orders_create")) A.push(`<button class="btn b" data-md-neworder="${c.id}">+ Nouvelle commande</button>`);
+  if(c.phone) A.push(`<a class="btn" style="background:#25D366" href="https://wa.me/${esc((c.dial+c.local).replace(/[^\d]/g,""))}" target="_blank" rel="noopener">WhatsApp</a>`);
+  if(canEditP) A.push(`<button class="btn ghost" data-md-cedit="${c.id}">✎ Modifier la fiche</button>`);
+
+  const sum=[
+    {k:"CA livré", v:fmt(caTotal), cls:"total"},
+    {k:"Crédit en cours", v:fmt(credit), cls:"due"},
+    {k:"Commandes", v:String(nbCmd)},
+    {k:"Panier moyen", v:fmt(panier)},
+  ];
+  if(S.settings&&S.settings.loyaltyEnabled) sum.push({k:"Points fidélité ⭐", v:String(c.points||0), cls:"paid"});
+
+  const cstatus = credit>0 ? {label:"Crédit "+fmt(credit), kind:"warn"} : {label:"À jour", kind:"ok"};
+  return recShell({ type:"client", id:c.id, title:c.name, sub:`${esc(c.type||"")}${c.zone?" · "+esc(c.zone):""}`, status:cstatus, actions:A,
+    sections:[ {title:"Informations principales", html:infoSection}, {title:"💠 Prix négociés (spécifiques à ce client)", html:negSection}, {title:"Historique des commandes ("+nbCmd+")", html:histSection} ],
+    summary:sum, summaryTitle:"Synthèse client" });
+}
+
+/* --- FOURNISSEUR --- */
+function recSupplierPage(id){
+  const s = S.suppliers.find(s=>s.id===+id); if(!s) return null;
+  const pu = S.purchases.filter(p=>p.supplierId===+id).sort((a,b)=>b.id-a.id);
+  const total = pu.reduce((a,p)=>a+p.amount,0);
+  const enCours = pu.filter(p=>p.status!=="Reçu").length;
+  const rows = pu.length? pu.map(p=>`<tr><td><b>${esc(p.num)}</b></td><td>${p.date}</td><td class="muted">${esc(p.ref||"")}</td><td class="num">${fmt(p.amount)}</td><td><span class="badge ${p.status==="Reçu"?"ok":p.status==="En transit"?"delivered":"pending"}">${esc(p.status)}</span></td></tr>`).join("") : `<tr><td colspan="5" class="empty">Aucun achat.</td></tr>`;
+
+  const infoSection = `<div class="recgrid">
+    <div class="recfield"><div class="reclbl">Zone</div><div class="recval">${esc(s.zone||"—")}</div></div>
+    <div class="recfield"><div class="reclbl">Catégorie</div><div class="recval">${esc(s.cat||"—")}</div></div>
+    ${s.delay?`<div class="recfield"><div class="reclbl">Délai</div><div class="recval">${s.delay} jours</div></div>`:""}
+    ${s.contact?`<div class="recfield"><div class="reclbl">Contact</div><div class="recval">${esc(s.contact)}</div></div>`:""}
+    ${s.terms?`<div class="recfield"><div class="reclbl">Conditions</div><div class="recval">${esc(s.terms)}</div></div>`:""}
+  </div>`;
+  const histSection = `<div class="tablewrap"><table><tr><th>N°</th><th>Date</th><th>Référence</th><th class="num">Montant</th><th>Statut</th></tr>${rows}</table></div>`;
+
+  const A=[];
+  if(can("suppliers")) A.push(`<button class="btn ghost" data-md-sedit="${s.id}">✎ Modifier la fiche</button>`);
+
+  const sum=[
+    {k:"Total achats", v:fmt(total), cls:"total"},
+    {k:"Commandes d'achat", v:String(pu.length)},
+    {k:"En cours", v:String(enCours), cls:enCours?"due":""},
+  ];
+  const sstatus = enCours>0 ? {label:enCours+" en cours", kind:"warn"} : {label:"À jour", kind:"ok"};
+  return recShell({ type:"supplier", id:s.id, title:s.name, sub:`${esc(s.cat||"")}${s.zone?" · "+esc(s.zone):""}`, status:sstatus, actions:A,
+    sections:[ {title:"Informations principales", html:infoSection}, {title:"Historique des achats ("+pu.length+")", html:histSection} ],
+    summary:sum, summaryTitle:"Synthèse fournisseur" });
+}
+
+/* --- PRODUIT --- */
+function recProductPage(id){
+  const p = S.products.find(p=>p.id===+id); if(!p) return null;
+  let qtyVendue=0, caGen=0, margeGen=0; const recent=[];
+  S.orders.filter(o=>o.status!=="cancelled").sort((a,b)=>b.id-a.id).forEach(o=>{
+    const l=o.lines.find(l=>l.productId===+id);
+    if(l){ if(o.delivered){ qtyVendue+=l.qty; caGen+=l.qty*l.price; margeGen+=l.qty*(l.price-(p.cost||0)); } if(recent.length<10) recent.push({o,l}); }
+  });
+  const marge = p.price-(p.cost||0);
+  const margePct = p.price? Math.round(marge/p.price*100):0;
+  const stockLow = p.stock<=(p.alert||0);
+  const rows = recent.length? recent.map(({o,l})=>`<tr style="cursor:pointer" data-rec-order="${o.id}"><td><b>${esc(o.num)}</b></td><td>${o.date}</td><td>${esc(clientName(o.clientId))}</td><td class="num">${l.qty}</td><td class="num">${fmt(l.qty*l.price)}</td></tr>`).join("") : `<tr><td colspan="5" class="empty">Aucune vente.</td></tr>`;
+
+  const infoSection = `${p.img?`<div style="text-align:center;margin:0 0 14px"><img src="${esc(p.img)}" style="max-width:220px;max-height:220px;border-radius:12px;border:1px solid #eee"></div>`:""}
+  <div class="recgrid">
+    <div class="recfield"><div class="reclbl">Famille</div><div class="recval">${esc(p.family||"—")}</div></div>
+    <div class="recfield"><div class="reclbl">Prix de vente</div><div class="recval"><b style="color:var(--bleu)">${fmt(p.price)}</b></div></div>
+    <div class="recfield"><div class="reclbl">Coût d'achat</div><div class="recval">${fmt(p.cost||0)}</div></div>
+    <div class="recfield"><div class="reclbl">Marge unitaire</div><div class="recval" style="color:var(--vert)"><b>${margePct} %</b> (${fmt(marge)})</div></div>
+    <div class="recfield"><div class="reclbl">Seuil d'alerte</div><div class="recval">${p.alert||0}</div></div>
+  </div>
+  ${stockLow?`<div class="alertbox" style="margin-top:12px">⚠ Stock bas (seuil : ${p.alert||0}). Pensez à réapprovisionner.</div>`:""}`;
+  const histSection = `<div class="tablewrap"><table><tr><th>N°</th><th>Date</th><th>Client</th><th class="num">Qté</th><th class="num">Montant</th></tr>${rows}</table></div>`;
+
+  const A=[];
+  if(can("products_manage")) A.push(`<button class="btn ghost" data-md-pedit="${p.id}">✎ Modifier le produit</button>`);
+
+  const sum=[
+    {k:"En stock", v:String(p.stock), cls:stockLow?"due":""},
+    {k:"Valeur du stock", v:fmt(p.stock*(p.cost||0))},
+    {k:"Quantité vendue", v:String(qtyVendue)},
+    {k:"CA généré", v:fmt(caGen), cls:"total"},
+    {k:"Marge générée", v:fmt(margeGen), cls:"paid"},
+  ];
+  const pstatus = stockLow ? {label:"Stock bas", kind:"bad"} : {label:"En stock", kind:"ok"};
+  return recShell({ type:"product", id:p.id, title:p.name, sub:esc(p.family||""), status:pstatus, actions:A,
+    sections:[ {title:"Informations principales", html:infoSection}, {title:"Ventes récentes", html:histSection} ],
+    summary:sum, summaryTitle:"Performance" });
+}
+
+/* --- DEVIS (nouvelle fiche) --- */
+function recQuotePage(id){
+  const q = S.quotes.find(x=>x.id===+id); if(!q) return null;
+  const c = S.clients.find(c=>c.id===q.clientId)||{};
+  const ttc=quoteTotal(q), tva=quoteTVA(q), ht=ttc-tva;
+  const expired = q.validity && q.validity<today() && q.status!=="converti";
+  let st;
+  if(q.status==="converti") st={label:"Converti", kind:"ok"};
+  else if(q.status==="accepté") st={label:"Accepté", kind:"info"};
+  else if(q.status==="refusé") st={label:"Refusé", kind:"bad"};
+  else st={label: expired?"Expiré":"En attente", kind: expired?"bad":"warn"};
+
+  const lignes = q.lines.map(l=>`<tr><td>${esc(prodName(l.productId)||l.name||"")}</td><td class="num">${l.qty}</td><td class="num">${fmt(l.price)}</td><td class="num">${fmt(l.qty*l.price)}</td></tr>`).join("");
+  const infoSection = `<div class="recgrid">
+    <div class="recfield"><div class="reclbl">Client</div><div class="recval"><a href="${recordHref("client",q.clientId)}" style="color:var(--bleu);font-weight:700;text-decoration:none">${esc(c.name||"—")}</a></div></div>
+    <div class="recfield"><div class="reclbl">Date</div><div class="recval">${frDate(q.date)}</div></div>
+    <div class="recfield"><div class="reclbl">Validité</div><div class="recval" style="${expired?"color:var(--rouge)":""}">${q.validity?frDate(q.validity):"—"}${expired?" (expiré)":""}</div></div>
+    ${c.type?`<div class="recfield"><div class="reclbl">Type client</div><div class="recval">${esc(c.type)}</div></div>`:""}
+    ${q.createdBy?`<div class="recfield"><div class="reclbl">Créé par</div><div class="recval">${esc(q.createdBy)}</div></div>`:""}
+    ${(clientDiscount(c)>0||(c.customPrices&&Object.keys(c.customPrices).length))?`<div class="recfield"><div class="reclbl">Tarif client</div><div class="recval"><span class="badge" style="background:var(--terra)">${esc(clientTariffLabel(c))}</span></div></div>`:""}
+  </div>`;
+  const linesSection = `<div class="tablewrap"><table><tr><th>Désignation</th><th class="num">Qté</th><th class="num">P.U.</th><th class="num">Montant</th></tr>${lignes}</table></div>`;
+
+  const A=[];
+  A.push(`<button class="btn ghost" data-q-pdf="${q.id}">⬇ PDF</button>`);
+  if(q.status!=="converti") A.push(`<button class="btn b" data-q-conv="${q.id}">→ Convertir en commande</button>`);
+  if(q.status!=="converti"&&q.status!=="accepté") A.push(`<button class="btn" style="background:var(--vert)" data-q-accept="${q.id}">✓ Marquer accepté</button>`);
+
+  const sum=[];
+  if(tva>0){ sum.push({k:"Sous-total HT", v:fmt(ht)}); sum.push({k:"TVA ("+tvaRate()+" %)", v:fmt(tva)}); }
+  sum.push({k:"Total TTC", v:fmt(ttc), cls:"total"});
+  return recShell({ type:"quote", id:q.id, title:"Devis "+q.num, sub:esc(clientName(q.clientId)), status:st, actions:A,
+    sections:[ {title:"Informations principales", html:infoSection}, {title:"Lignes du devis ("+q.lines.length+")", html:linesSection} ],
+    summary:sum, summaryTitle:"Synthèse devis" });
+}
+
+/* --- liaisons des fiches plein écran --- */
+function bindRecordPage(r){
+  const root = el("root");
+  const Q  = sel => root.querySelector(sel);
+  const QA = sel => root.querySelectorAll(sel);
+
+  const bk = Q("[data-recback]"); if(bk) bk.onclick=()=>{ const t=bk.dataset.recback||"dash"; exitRecord(); tab=t; searchQ=""; render(); window.scrollTo(0,0); };
+  QA("[data-sectoggle]").forEach(h=> h.onclick=()=>{ const card=h.closest(".reccard"); if(card) card.classList.toggle("collapsed"); });
+  const cpL = Q("[data-reccopy]"); if(cpL) cpL.onclick=()=>{
+    const url = location.origin + location.pathname + cpL.dataset.reccopy;
+    const ok = ()=> toast("Lien copié ✓");
+    const fb = ()=>{ const t=document.createElement("textarea"); t.value=url; t.style.position="fixed"; t.style.opacity="0"; document.body.appendChild(t); t.select(); try{document.execCommand("copy");}catch(e){} t.remove(); ok(); };
+    if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(ok).catch(fb); else fb();
+  };
+  QA("[data-rec-order]").forEach(row=> row.onclick=()=> goRecord("order", +row.dataset.recOrder));
+
+  // COMMANDE / FACTURE
+  const o = S.orders.find(x=>x.id===+r.id);
+  if(o){
+    if(Q("[data-md-deliver]")) Q("[data-md-deliver]").onclick=()=>{ confirmAction({title:"Confirmer la livraison", message:`Marquer la commande <b>${esc(o.num)}</b> comme livrée à <b>${esc(clientName(o.clientId))}</b> ?<br><br>Le stock sera décrémenté. Le paiement se fera ensuite à la Caisse.`, okLabel:"Oui, livrer"}, ()=>{ deliverOrder(o.id); }); };
+    if(Q("[data-md-edit]")) Q("[data-md-edit]").onclick=()=>{ exitRecord(); startEditOrder(o.id); };
+    if(Q("[data-md-receipt]")) Q("[data-md-receipt]").onclick=()=>{ printHTML(orderReceiptHTML(o)); };
+    if(Q("[data-md-bl]")) Q("[data-md-bl]").onclick=async ()=>{ await issueDeliveryNote(o.id); render(); };
+    if(Q("[data-md-invoice]")) Q("[data-md-invoice]").onclick=async ()=>{ assignInvoiceNum(o); await save(); render(); toast("Facture "+o.invoiceNum+" générée ✓ — encaissement à la Caisse"); printHTML(invoiceHTML(o)); };
+    if(Q("[data-md-invpdf]")) Q("[data-md-invpdf]").onclick=async ()=>{ assignInvoiceNum(o); await save(); render(); downloadInvoicePDF(o); };
+    if(Q("[data-md-cancelinv]")) Q("[data-md-cancelinv]").onclick=()=> cancelInvoice(o.id);
+    if(Q("[data-md-cancelorder]")) Q("[data-md-cancelorder]").onclick=()=> cancelOrderWithReason(o.id);
+    QA("[data-cancelpay]").forEach(b=> b.onclick=()=> cancelPayment(o.id, +b.dataset.cancelpay));
+  }
+
+  // CLIENT
+  const c = S.clients.find(x=>x.id===+r.id);
+  const no=Q("[data-md-neworder]"); if(no) no.onclick=()=>{ exitRecord(); startNewOrderFor(+no.dataset.mdNeworder); };
+  const ce=Q("[data-md-cedit]"); if(ce) ce.onclick=()=>{ exitRecord(); editClientId=+ce.dataset.mdCedit; tab="clients"; render(); window.scrollTo(0,0); };
+  const cpAdd=Q("#cp-add"); if(cpAdd) cpAdd.onclick=async ()=>{
+    const pid=+el("cp-prod").value; const price=+el("cp-price").value;
+    if(!pid||!(price>0)) return toast("Choisissez un produit et un prix valide");
+    if(c){ c.customPrices=c.customPrices||{}; c.customPrices[pid]=Math.round(price); log("Prix négocié : "+(S.products.find(p=>p.id===pid)?.name||"")+" → "+fmt(price)+" ("+c.name+")"); await save(); render(); }
+  };
+  QA("[data-cp-rm]").forEach(b=> b.onclick=async ()=>{ const pid=b.dataset.cpRm; if(c&&c.customPrices) delete c.customPrices[pid]; log("Prix négocié retiré ("+(c?c.name:"")+")"); await save(); render(); });
+
+  // FOURNISSEUR
+  const se=Q("[data-md-sedit]"); if(se) se.onclick=()=>{ exitRecord(); editSupplierId=+se.dataset.mdSedit; tab="suppliers"; render(); window.scrollTo(0,0); };
+
+  // PRODUIT
+  const pe=Q("[data-md-pedit]"); if(pe) pe.onclick=()=>{ exitRecord(); tab="products"; render(); window.scrollTo(0,0); };
+
+  // DEVIS
+  const qp=Q("[data-q-pdf]"); if(qp) qp.onclick=()=>{ const q=S.quotes.find(x=>x.id===+qp.dataset.qPdf); if(q) downloadQuotePDF(q); };
+  const qc=Q("[data-q-conv]"); if(qc) qc.onclick=()=>{ const id=+qc.dataset.qConv; exitRecord(); tab="orders"; convertQuoteToOrder(id); };
+  const qa=Q("[data-q-accept]"); if(qa) qa.onclick=async ()=>{ const q=S.quotes.find(x=>x.id===+qa.dataset.qAccept); if(q){ q.status="accepté"; log("Devis accepté : "+q.num); await save(); render(); toast("Devis marqué accepté ✓"); } };
+}
+
+function openQuoteDetail(id){ goRecord("quote", id); }
+
 function openOrderDetail(id){
+  if(!isMobileG()){ goRecord("order", id); return; }
   const o = S.orders.find(o=>o.id===id); if(!o) return;
   const c = S.clients.find(c=>c.id===o.clientId)||{};
   const due = orderDue(o), paid = orderPaid(o);
@@ -2077,6 +2475,7 @@ function openOrderDetail(id){
 }
 
 function openClientDetail(id){
+  if(!isMobileG()){ goRecord("client", id); return; }
   const c = S.clients.find(c=>c.id===id); if(!c) return;
   const co = S.orders.filter(o=>o.clientId===id && o.status!=="cancelled").sort((a,b)=>b.id-a.id);
   const caTotal = co.filter(o=>o.delivered).reduce((a,o)=>a+orderTotal(o),0);
@@ -2133,6 +2532,7 @@ function openClientDetail(id){
 }
 
 function openSupplierDetail(id){
+  if(!isMobileG()){ goRecord("supplier", id); return; }
   const s = S.suppliers.find(s=>s.id===id); if(!s) return;
   const pu = S.purchases.filter(p=>p.supplierId===id).sort((a,b)=>b.id-a.id);
   const total = pu.reduce((a,p)=>a+p.amount,0);
@@ -2156,6 +2556,7 @@ function openSupplierDetail(id){
 }
 
 function openProductDetail(id){
+  if(!isMobileG()){ goRecord("product", id); return; }
   const p = S.products.find(p=>p.id===id); if(!p) return;
   // ventes de ce produit (commandes livrées non annulées)
   const live = S.orders.filter(o=>o.status!=="cancelled" && o.delivered);
@@ -3795,6 +4196,8 @@ function render(){
   const root = el("root");
   if (!S.users.length) { root.innerHTML = vSetup(); bindSetup(); return; }
   if (!session || !me()) { root.innerHTML = vLogin(); bindLogin(); return; }
+  route = parseRoute();
+  if (route) { root.innerHTML = chrome(renderRecordPage(route)); bindApp(); bindRecordPage(route); setTimeout(refreshWebBadge, 20); updateDbBanner(); window.scrollTo(0,0); return; }
   if (isMobileG()) { return renderMobileG(); }
   const views = {dash:vDash, weborders:vWebOrders, messages:vMessages, quotes:vQuotes, orders:vOrders, invoices:vInvoices, clients:vClients, products:vProducts, suppliers:vSuppliers, logistics:vLogistics, cash:vCash, accounting:vAccounting, control:vControl, marketing:vMarketing, hr:vHR, monitoring:vMonitoring, users:vUsers, settings:vSettings, backup:vBackup};
   const guard = {weborders:"orders_create", cash:"cash_view", suppliers:"suppliers", accounting:"accounting", control:"control", logistics:"logistics", marketing:"marketing", hr:"hr", monitoring:"monitoring"};
@@ -3978,7 +4381,7 @@ function bindLogin(){
 }
 
 function bindApp(){
-  document.querySelectorAll("nav button").forEach(b=> b.onclick = ()=>{ tab=b.dataset.tab; searchQ=""; render(); });
+  document.querySelectorAll("nav button").forEach(b=> b.onclick = ()=>{ exitRecord(); tab=b.dataset.tab; searchQ=""; render(); });
   el("logout").onclick = async ()=>{ log("Déconnexion"); await save(); session=null; await saveSession(); render(); };
   const mp = el("myprofile"); if(mp) mp.onclick = openProfile;
   // Cartes KPI cliquables → navigation directe
