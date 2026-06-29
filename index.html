@@ -26,7 +26,7 @@
   .sub{color:#C9D4E2; font-size:9px; letter-spacing:3px;}
   .hsearch{flex:1 1 240px; position:relative; min-width:180px;}
   .hsearch input{width:100%; padding:9px 14px 9px 34px; font-size:14px; border-radius:20px; border:none; background:#fff; color:var(--anthra);}
-  .hsearch::before{content:"🔍"; position:absolute; left:11px; top:50%; transform:translateY(-50%); font-size:13px; opacity:.6;}
+  .hsearch::before{content:""; position:absolute; left:11px; top:50%; transform:translateY(-50%); font-size:13px; opacity:.6;}
   .hsearch-results{position:absolute; top:42px; left:0; right:0; background:#fff; border-radius:10px; box-shadow:0 8px 30px rgba(0,0,0,.25); z-index:50; max-height:420px; overflow:auto; display:none;}
   .hsearch-results.show{display:block;}
   .hsr-cat{font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--terra); padding:8px 12px 4px;}
@@ -351,10 +351,10 @@ const PERMS = [
   ["monitoring","Voir le monitoring et les objectifs"],
 ];
 const COUNTRY_CODES = [
-  ["+221","🇸🇳 Sénégal"],["+223","🇲🇱 Mali"],["+225","🇨🇮 Côte d'Ivoire"],["+222","🇲🇷 Mauritanie"],
-  ["+224","🇬🇳 Guinée"],["+226","🇧🇫 Burkina"],["+227","🇳🇪 Niger"],["+228","🇹🇬 Togo"],["+229","🇧🇯 Bénin"],
-  ["+233","🇬🇭 Ghana"],["+234","🇳🇬 Nigéria"],["+212","🇲🇦 Maroc"],["+216","🇹🇳 Tunisie"],["+33","🇫🇷 France"],
-  ["+86","🇨🇳 Chine"],["+90","🇹🇷 Turquie"],["+1","🇺🇸 USA/Canada"],["+44","🇬🇧 UK"],["+971","🇦🇪 Émirats"],
+  ["+221","Sénégal"],["+223","Mali"],["+225","Côte d'Ivoire"],["+222","Mauritanie"],
+  ["+224","Guinée"],["+226","Burkina"],["+227","Niger"],["+228","Togo"],["+229","Bénin"],
+  ["+233","Ghana"],["+234","Nigéria"],["+212","Maroc"],["+216","Tunisie"],["+33","France"],
+  ["+86","Chine"],["+90","Turquie"],["+1","USA/Canada"],["+44","UK"],["+971","Émirats"],
 ];
 const CHANNELS = ["WhatsApp","SMS","Facebook","Instagram","Terrain / visite","Affichage","Radio","Bouche à oreille","Autre"];
 const HR_CONTRACTS = ["CDI","CDD","Stage","Prestation","Journalier"];
@@ -470,6 +470,7 @@ let webThreads = [];      // portal_threads (conversations WhatsApp)
 let webSignups = [];      // portal_clients (inscriptions portail = prospects)
 let activeThreadId = null;
 let webQuotes = [];       // portal_quotes
+let webDevis = [];        // portal_devis (demandes de devis clients)
 let webLoaded = false;
 const acctFrom = () => acctPeriod.from; const acctTo = () => acctPeriod.to;
 const ctrlFrom = () => ctrlPeriod.from; const ctrlTo = () => ctrlPeriod.to;
@@ -559,6 +560,7 @@ async function loadAll(){
       FB.listenCollection("portal_appointments", rows=>{ webAppointments=rows; if(tab==="weborders"&&me()) render(); refreshWebBadge(); });
       FB.listenCollection("portal_threads", rows=>{ webThreads=rows; if((tab==="weborders"||tab==="messages")&&me()) render(); refreshWebBadge(); });
       FB.listenCollection("portal_quotes", rows=>{ webQuotes=rows; if(tab==="weborders"&&me()) render(); refreshWebBadge(); });
+      FB.listenCollection("portal_devis", rows=>{ webDevis=rows; if(tab==="weborders"&&me()) render(); refreshWebBadge(); });
     }
   }
 }
@@ -566,7 +568,8 @@ async function loadAll(){
 function refreshWebBadge(){
   const n = webOrders.filter(o=>o.status==="new").length
           + webAppointments.filter(a=>a.status==="pending").length
-          + webQuotes.filter(q=>q.status==="pending").length;
+          + webQuotes.filter(q=>q.status==="pending").length
+          + webDevis.filter(d=>d.status==="new").length;
   const btn = document.querySelector('[data-tab="weborders"]');
   if(btn){
     let b = btn.querySelector(".navbadge");
@@ -586,9 +589,37 @@ function refreshWebBadge(){
 async function save(){
   if (modalContent) savedDuringModal = true;  // un enregistrement a eu lieu pendant un formulaire ouvert
   try{ await store.set(KEY, JSON.stringify(S)); }
-  catch(e){ toast("⚠ Échec de la sauvegarde — exportez vos données"); }
+  catch(e){ toast("Échec de la sauvegarde — exportez vos données"); }
+  publishPublicCatalog();   // SÉCURITÉ : tient à jour le catalogue public assaini lu par le portail
   updateDbBanner();
 }
+
+/* ===== SÉCURITÉ — catalogue public assaini =====
+   Le portail ne doit JAMAIS lire le blob complet (clients, commandes, finances).
+   On publie ici un document léger et public (produits, familles via family, coordonnées,
+   paliers de gros) que le portail consomme à la place de distrivia/etat. */
+function buildPublicCatalog(){
+  const todayStr = new Date().toISOString().slice(0,10);
+  const promos = (S.promos||[]).filter(pr=> pr && pr.active!==false && (!pr.expire || pr.expire>=todayStr));
+  const products = (S.products||[]).map(p=>{
+    let bestPct=0;
+    promos.forEach(pr=>{ const tg=pr.target||""; const ok = tg==="all" || (tg.indexOf("fam:")===0 && tg.slice(4)===p.family) || (tg.indexOf("prod:")===0 && +tg.slice(5)===p.id); if(ok && (pr.pct||0)>bestPct) bestPct=pr.pct; });
+    const promoPrice = bestPct? Math.round(p.price*(1-bestPct/100)) : null;
+    return { id:p.id, name:p.name, family:p.family, price:p.price, img:p.img||null, stock:p.stock, promoPct:bestPct||null, promoPrice };
+  });
+  const co = (S.settings && S.settings.company) ? Object.assign({}, S.settings.company) : {};
+  if(!co.ninea) co.ninea = (S.settings&&S.settings.ninea)||"";
+  if(!co.rccm)  co.rccm  = (S.settings&&S.settings.rccm)||"";
+  const tiers = (S.settings && Array.isArray(S.settings.priceTiers) && S.settings.priceTiers.length)
+    ? S.settings.priceTiers.map(tr=>({ name:tr.name, discount:+tr.discount||0 })) : [];
+  return { products, company:co, tiers, updated: Date.now() };
+}
+async function publishPublicCatalog(){
+  if(!FB || !FB.setDoc) return;
+  try{ await FB.setDoc("portal_public", "catalog", buildPublicCatalog()); }
+  catch(e){ console.warn("publishPublicCatalog:", e); }
+}
+window.publishPublicCatalog = publishPublicCatalog;
 
 /* ===== ROBUSTESSE : taille de la base, conflits, archivage ===== */
 const BLOB_LIMIT = 1048576; // 1 Mo : limite d'un document Firebase
@@ -609,7 +640,7 @@ function fmtKo(b){ return (b/1024).toFixed(0); }
 function showSyncBanner(){
   let el0=document.getElementById("syncbanner");
   if(!el0){ el0=document.createElement("div"); el0.id="syncbanner"; document.body.appendChild(el0); }
-  el0.innerHTML='🔄 Un autre utilisateur vient d\'enregistrer. Votre saisie est préservée — ses changements s\'afficheront à la fermeture de ce formulaire.';
+  el0.innerHTML='Un autre utilisateur vient d\'enregistrer. Votre saisie est préservée — ses changements s\'afficheront à la fermeture de ce formulaire.';
   el0.style.display="block";
 }
 function hideSyncBanner(){ const e=document.getElementById("syncbanner"); if(e) e.style.display="none"; }
@@ -621,10 +652,10 @@ function updateDbBanner(){
   const pct=Math.round(h.pct*100);
   if(h.level==="crit"){
     el0.style.background="#A33B3B";
-    el0.innerHTML=`⚠️ Base de données presque pleine (${pct}%). Archivez d'anciennes commandes soldées (onglet Sauvegarde) pour éviter tout blocage.`;
+    el0.innerHTML=`Base de données presque pleine (${pct}%). Archivez d'anciennes commandes soldées (onglet Sauvegarde) pour éviter tout blocage.`;
   } else {
     el0.style.background="#C9962B";
-    el0.innerHTML=`⚠ Base de données remplie à ${pct}%. Pensez à archiver d'anciennes commandes (onglet Sauvegarde).`;
+    el0.innerHTML=`Base de données remplie à ${pct}%. Pensez à archiver d'anciennes commandes (onglet Sauvegarde).`;
   }
   el0.style.display="block";
   _lastDbLevel=h.level;
@@ -910,7 +941,7 @@ function vSetup(){
     <label>Mot de passe</label><input id="su-pass" type="password" autocomplete="new-password">
     <label>Confirmer le mot de passe</label><input id="su-pass2" type="password" autocomplete="new-password">
     <button class="btn" id="su-go" style="width:100%;margin-top:14px">Créer le compte administrateur</button>
-    ${store.mode==="memory" ? `<div class="alertbox" style="margin-top:12px">⚠ Stockage indisponible sur ce navigateur : les données seront perdues à la fermeture.</div>` : ""}
+    ${store.mode==="memory" ? `<div class="alertbox" style="margin-top:12px">Stockage indisponible sur ce navigateur : les données seront perdues à la fermeture.</div>` : ""}
   </div><div class="footnote">DISTRIVIA Distribution Group · Dakar · Sénégal</div></div>`;
 }
 function vLogin(){
@@ -956,7 +987,7 @@ function chrome(content){
       <input id="globalsearch" placeholder="Rechercher un client, un téléphone, un n° de commande…" value="${esc(searchQ)}" autocomplete="off">
       <div class="hsearch-results ${searchQ.trim().length>=2?"show":""}" id="hsearch-results">${searchQ.trim().length>=2?globalSearchHTML():""}</div>
     </div>
-    <div class="uzone"><span>👤 <b>${esc(u.name)}</b> ${u.role==="admin"?'<span class="badge admin">Admin</span>':'<span class="badge emp">Employé</span>'}</span>
+    <div class="uzone"><span><b>${esc(u.name)}</b> ${u.role==="admin"?'<span class="badge admin">Admin</span>':'<span class="badge emp">Employé</span>'}</span>
     <button class="btn sm ghost" id="myprofile">Mon profil</button>
     <button class="btn sm ghost" id="logout">Déconnexion</button></div>
   </header>
@@ -1019,7 +1050,7 @@ function orderRow(o){
   let act = "";
   if (o.status!=="cancelled") {
     if (!o.delivered && can("orders_deliver")) act += `<button class="btn sm b" data-deliver="${o.id}">Livrer</button> `;
-    if (o.delivered && !o.invoiceNum && can("orders_pay")) act += `<button class="btn sm" data-makeinv-row="${o.id}">📄 Facturer</button> `;
+    if (o.delivered && !o.invoiceNum && can("orders_pay")) act += `<button class="btn sm" data-makeinv-row="${o.id}">Facturer</button> `;
     if (can("orders_edit")) act += `<button class="btn sm ghost" data-oedit="${o.id}">Modifier</button> `;
     act += `<button class="btn sm ghost" data-oreceipt="${o.id}">Reçu</button> `;
     if (can("orders_cancel")) act += `<button class="btn sm" style="background:var(--rouge)" data-ocancel="${o.id}">Annuler</button>`;
@@ -1091,7 +1122,7 @@ function vInvoices(){
       <button class="btn sm ghost" id="exp-invoices-csv">Export CSV</button>
     </div>
     <div class="row" style="gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:end">
-      <div style="flex:1;min-width:180px"><label style="font-size:11px;color:var(--gris)">Recherche (n° facture, commande, client)</label><input id="inv-search" value="${esc(invSearch)}" placeholder="🔍 Ex. FAC-2026-0003 ou Teranga"></div>
+      <div style="flex:1;min-width:180px"><label style="font-size:11px;color:var(--gris)">Recherche (n° facture, commande, client)</label><input id="inv-search" value="${esc(invSearch)}" placeholder="Ex. FAC-2026-0003 ou Teranga"></div>
       <div><label style="font-size:11px;color:var(--gris)">Du</label><input type="date" id="inv-from" value="${invFrom}"></div>
       <div><label style="font-size:11px;color:var(--gris)">Au</label><input type="date" id="inv-to" value="${invTo}"></div>
       ${(invSearch||invFrom||invTo)?`<button class="btn sm ghost" id="inv-clear">Réinitialiser</button>`:""}
@@ -1107,7 +1138,7 @@ function vInvoices(){
         <td class="num">${fmt(x.paid)}</td>
         <td class="num">${x.due?'<span style="color:var(--terra)">'+fmt(x.due)+'</span>':'—'}</td>
         <td>${stLabel[x.st]}</td>
-        <td class="row"><button class="btn sm ghost" data-invview="${x.o.id}">Voir</button><button class="btn sm b" data-invpdf="${x.o.id}">⬇ PDF</button><button class="btn sm ghost" data-invprint="${x.o.id}">Imprimer</button></td>
+        <td class="row"><button class="btn sm ghost" data-invview="${x.o.id}">Voir</button><button class="btn sm b" data-invpdf="${x.o.id}">PDF</button><button class="btn sm ghost" data-invprint="${x.o.id}">Imprimer</button></td>
       </tr>`).join("") : `<tr><td colspan="9" class="empty">Aucune facture ${(invFilter!=="all"||invSearch||invFrom||invTo)?"pour ces critères":"— générez-en depuis une commande ou ci-dessus"}.</td></tr>`}
     </table></div>
   </div>`;
@@ -1145,10 +1176,9 @@ function vMessages(){
   const listHTML = threads.length ? threads.map(t=>{
     const isActive = active && t._id===active._id;
     const last = t.lastText || (t.messages&&t.messages.length?t.messages[t.messages.length-1].text:"");
-    const who = t.kind==="supplier"?"🏭":"🛒";
+    const who = t.kind==="supplier"?"":"";
     return `<div class="thread-item ${isActive?'active':''}" data-thread="${esc(t._id)}">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <b>${who} ${esc(t.party_name||"Client")}</b>
+      <div style="display:flex;justify-content:space-between;align-items:center"><b>${who} ${esc(t.party_name||"Client")}</b>
         ${t.unreadForAdmin?'<span class="navbadge" style="margin:0">●</span>':''}
       </div>
       <div class="muted" style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.lastFrom==="DISTRIVIA"?"Vous : ":""}${esc(last||"")}</div>
@@ -1222,7 +1252,7 @@ function webBadge(s){ return {new:"pending",confirmed:"delivered",delivered:"pai
 function webStatusLabel(s){ return {new:"Nouvelle",confirmed:"Confirmée",delivered:"Livrée",cancelled:"Annulée",pending:"En attente",resolved:"Traitée"}[s]||s; }
 function vWebOrders(){
   if(!FB.ok){
-    return `<h2>Commandes web</h2><div class="infobox">Cette boîte de réception affiche les commandes, rendez-vous, réclamations et cotations envoyés depuis le <b>portail clients/fournisseurs</b>.<br><br>⚠ Firebase n'est pas configuré : la liaison avec le portail est inactive. Renseignez vos clés Firebase pour activer la réception en temps réel.</div>`;
+    return `<h2>Commandes web</h2><div class="infobox">Cette boîte de réception affiche les commandes, rendez-vous, réclamations et cotations envoyés depuis le <b>portail clients/fournisseurs</b>.<br><br>Firebase n'est pas configuré : la liaison avec le portail est inactive. Renseignez vos clés Firebase pour activer la réception en temps réel.</div>`;
   }
   const pendingOrders = webOrders.filter(o=>o.status==="new");
   const pendingAppts = webAppointments.filter(a=>a.status==="pending");
@@ -1238,15 +1268,15 @@ function vWebOrders(){
     <div class="card"><div class="v">${pendingQuotes.length}</div><div class="l">Cotations fournisseurs</div></div>
   </div>
 
-  <div class="panel"><h3>🛒 Commandes clients (${webOrders.length})</h3>
+  <div class="panel"><h3>Commandes clients (${webOrders.length})</h3>
   ${webOrders.length?`<div class="tablewrap"><table>
     <tr><th>Réf</th><th>Date</th><th>Client</th><th>Contact</th><th>Articles</th><th>Livraison</th><th>Statut</th><th></th></tr>
     ${[...webOrders].sort((a,b)=>(a.created<b.created?1:-1)).map(o=>`<tr>
       <td><b>${esc(o.ref)}</b></td><td>${(o.created||"").slice(0,10)}</td>
       <td>${esc(o.client_name||"")}<div class="muted">${esc(o.client_email||"")}</div></td>
-      <td class="muted">${o.client_phone?`📞 ${esc(o.client_phone)}`:'<span style="color:#bbb">—</span>'}</td>
-      <td class="muted">${(o.items||[]).map(i=>i.qty+"× "+esc(i.name)).join(", ")}${o.note?`<div style="margin-top:6px;background:#FFF3E0;border-left:3px solid var(--terra);padding:6px 9px;border-radius:4px;color:#7a3d12;font-weight:600">📝 Note client : ${esc(o.note)}</div>`:""}</td>
-      <td class="muted">${o.delivery==="pickup"?"Retrait":"Livraison"}${o.zone?"<br>📍 "+esc(o.zone):""}</td>
+      <td class="muted">${o.client_phone?`${esc(o.client_phone)}`:'<span style="color:#bbb">—</span>'}</td>
+      <td class="muted">${(o.items||[]).map(i=>i.qty+"× "+esc(i.name)).join(", ")}${o.note?`<div style="margin-top:6px;background:#FFF3E0;border-left:3px solid var(--terra);padding:6px 9px;border-radius:4px;color:#7a3d12;font-weight:600">Note client : ${esc(o.note)}</div>`:""}</td>
+      <td class="muted">${o.delivery==="pickup"?"Retrait":"Livraison"}${o.zone?"<br>"+esc(o.zone):""}</td>
       <td><span class="badge ${webBadge(o.status)}">${webStatusLabel(o.status)}</span></td>
       <td class="row">${o.status==="new"?`<button class="btn sm b" data-webaccept="${esc(o._id)}">Accepter</button><button class="btn sm" style="background:var(--rouge)" data-webreject="${esc(o._id)}">Refuser</button>`:`<span class="muted">${o.localNum?("→ "+esc(o.localNum)):"traitée"}</span>`}</td>
     </tr>`).join("")}
@@ -1254,23 +1284,35 @@ function vWebOrders(){
   </div>
 
   <div class="grid2">
-    <div class="panel"><h3>📅 Rendez-vous (${webAppointments.length})</h3>
+  <div class="panel"><h3>Demandes de devis (${webDevis.length})</h3>
+  ${webDevis.length?`<div class="tablewrap"><table><tr><th>Réf</th><th>Client</th><th>Articles</th><th>Total estimé</th><th>Statut</th><th></th></tr>
+    ${[...webDevis].sort((a,b)=>(a.created<b.created?1:-1)).map(d=>`<tr>
+      <td><b>${esc(d.ref)}</b><div class="muted" style="font-size:11px">${(d.created||"").slice(0,10)}</div></td>
+      <td>${esc(d.client_name||"")}${d.client_phone?`<div class="muted" style="font-size:11px">${esc(d.client_phone)}</div>`:""}</td>
+      <td>${(d.items||[]).map(i=>i.qty+"× "+esc(i.name)).join(", ")}${d.note?`<div class="muted" style="font-size:11px">${esc(d.note)}</div>`:""}</td>
+      <td>${d.estTotal!=null?fmt(d.estTotal):"—"}</td>
+      <td><span class="badge ${d.status==="new"?"new":(d.status==="processed"?"delivered":"cancelled")}">${({new:"À traiter",processed:"Pris en charge",cancelled:"Refusé"})[d.status]||d.status}</span></td>
+      <td>${d.status==="new"?`<button class="btn sm b" data-webdevis="${d._id}">Créer le devis</button> <button class="btn sm ghost" data-webdevisx="${d._id}">Refuser</button>`:""}</td>
+    </tr>`).join("")}
+  </table></div>`:`<p class="muted">Aucune demande de devis.</p>`}
+  </div>
+    <div class="panel"><h3>Rendez-vous (${webAppointments.length})</h3>
     ${webAppointments.length?`<div class="tablewrap"><table><tr><th>Client</th><th>Objet</th><th>Quand</th><th>Statut</th><th></th></tr>
       ${[...webAppointments].sort((a,b)=>(a.created<b.created?1:-1)).map(a=>{
         const stBadge = a.status==="cancelled"?'<span class="badge off">Annulé</span>':(a.status==="confirmed"?'<span class="badge paid">Confirmé</span>':'<span class="badge pending">En attente</span>');
         return `<tr><td>${esc(a.client_name||"")}</td><td class="muted">${esc(a.subject||"")}</td><td>${esc(a.date||"")} ${esc(a.slot||"")}</td>
-        <td>${stBadge}${a.cancelReason?`<div class="muted" style="font-size:11px">📝 ${esc(a.cancelReason)}</div>`:""}</td>
+        <td>${stBadge}${a.cancelReason?`<div class="muted" style="font-size:11px">${esc(a.cancelReason)}</div>`:""}</td>
         <td>${a.status==="pending"?`<button class="btn sm b" data-webappt="${esc(a._id)}">Confirmer</button>`:""}</td></tr>`;
       }).join("")}
     </table></div>`:`<p class="empty">Aucun rendez-vous.</p>`}
     </div>
-    <div class="panel"><h3>💬 Messagerie</h3>
+    <div class="panel"><h3>Messagerie</h3>
       <p class="muted">Les conversations clients et fournisseurs sont maintenant dans l'onglet <b>Messages</b> (chat en temps réel).</p>
       <button class="btn b" data-gotab="messages" style="margin-top:8px">Ouvrir la messagerie ${webThreads.filter(t=>t.unreadForAdmin).length?`(${webThreads.filter(t=>t.unreadForAdmin).length} non lus)`:""}</button>
     </div>
   </div>
 
-  <div class="panel"><h3>🏭 Cotations fournisseurs (${webQuotes.length})</h3>
+  <div class="panel"><h3>Cotations fournisseurs (${webQuotes.length})</h3>
   ${webQuotes.length?`<div class="tablewrap"><table><tr><th>Réf</th><th>Fournisseur</th><th>Produit</th><th>Prix proposé</th><th>Délai</th><th></th></tr>
     ${[...webQuotes].sort((a,b)=>(a.created<b.created?1:-1)).map(q=>`<tr><td><b>${esc(q.ref)}</b></td><td>${esc(q.supplier_name||"")}</td><td>${esc(q.product||"")}${q.moq?`<div class="muted">MOQ : ${esc(q.moq)}</div>`:""}</td><td>${esc(q.price||"")}</td><td class="muted">${esc(q.delay||"")}</td>
     <td>${q.status==="pending"?`<button class="btn sm b" data-webquote="${esc(q._id)}">Marquer vue</button>`:`<span class="badge paid">Vue</span>`}</td></tr>`).join("")}
@@ -1293,8 +1335,8 @@ function vDash(){
     <div class="card nav-card" data-gotab="products"><div class="v">${fmt(k.stockValue)}</div><div class="l">Valeur du stock (coût) ›</div></div>
     <div class="card ${k.solde<0?'r':'g'} nav-card" data-gotab="cash"><div class="v">${fmt(k.solde)}</div><div class="l">Solde de caisse ›</div></div>
   </div>
-  ${overdue.length?`<div class="alertbox"><b>⏰ ${overdue.length} crédit(s) échu(s) :</b> ${overdue.slice(0,5).map(o=>esc(o.num)+" — "+esc(clientName(o.clientId))+" ("+fmt(orderDue(o))+", éch. "+o.dueDate+")").join(" · ")} — relancer les clients.</div>`:""}
-  ${k.alerts.length?`<div class="alertbox"><b>⚠ Stock bas :</b> ${k.alerts.map(p=>esc(p.name)+" ("+p.stock+")").join(" · ")} — réassort à anticiper.</div>`:""}
+  ${overdue.length?`<div class="alertbox"><b>${overdue.length} crédit(s) échu(s) :</b> ${overdue.slice(0,5).map(o=>esc(o.num)+" — "+esc(clientName(o.clientId))+" ("+fmt(orderDue(o))+", éch. "+o.dueDate+")").join(" · ")} — relancer les clients.</div>`:""}
+  ${k.alerts.length?`<div class="alertbox"><b>Stock bas :</b> ${k.alerts.map(p=>esc(p.name)+" ("+p.stock+")").join(" · ")} — réassort à anticiper.</div>`:""}
   <div class="grid2">
     <div class="panel"><h3>Chiffre d'affaires — 6 derniers mois</h3><canvas id="ch-ca" height="150"></canvas></div>
     <div class="panel"><h3>Répartition du CA par famille</h3><canvas id="ch-fam" height="150"></canvas></div>
@@ -1370,13 +1412,13 @@ function vProducts(){
     <tr><th>Photo</th><th>Produit</th><th>Famille</th><th class="num">Coût</th><th class="num">Prix</th><th class="num">Marge</th><th class="num">Stock</th><th>État</th>${sr?"<th>Réception</th>":""}${pm?"<th></th>":""}</tr>
     ${S.products.length? S.products.map(p=>{
       const mg = p.price? Math.round((p.price-p.cost)/p.price*100):0;
-      return `<tr><td>${p.img?`<img src="${p.img}" style="width:42px;height:42px;object-fit:cover;border-radius:8px;cursor:pointer" data-pdetail="${p.id}">`:`<div style="width:42px;height:42px;border-radius:8px;background:var(--creme);display:flex;align-items:center;justify-content:center;color:#bbb;font-size:18px">📦</div>`}</td>
+      return `<tr><td>${p.img?`<img src="${p.img}" style="width:42px;height:42px;object-fit:cover;border-radius:8px;cursor:pointer" data-pdetail="${p.id}">`:`<div style="width:42px;height:42px;border-radius:8px;background:var(--creme);display:flex;align-items:center;justify-content:center;color:#bbb;font-size:18px"></div>`}</td>
       <td><b><a href="#" data-pdetail="${p.id}" style="color:var(--bleu);cursor:pointer">${esc(p.name)}</a></b></td><td class="muted">${esc(p.family)}</td>
       <td class="num">${fmt(p.cost)}</td><td class="num">${fmt(p.price)}</td><td class="num">${mg} %</td>
       <td class="num"><b>${p.stock}</b></td>
       <td>${p.stock<=p.alert?'<span class="badge alert">BAS</span>':'<span class="badge ok">OK</span>'}</td>
       ${sr?`<td><div class="row"><input type="number" min="1" style="width:64px" id="rcv-${p.id}" placeholder="qté"><button class="btn sm b" data-rcv="${p.id}">+ Stock</button></div></td>`:""}
-      ${pm?`<td class="row"><button class="btn sm ghost" data-pimg="${p.id}" title="Photo (fichier)">📷</button><button class="btn sm ghost" data-pimgurl="${p.id}" title="Lien image (URL)">🔗</button><button class="del" data-delp="${p.id}" title="Supprimer">✕</button></td>`:""}</tr>`;
+      ${pm?`<td class="row"><button class="btn sm ghost" data-pimg="${p.id}" title="Photo (fichier)">Photo</button><button class="btn sm ghost" data-pimgurl="${p.id}" title="Lien image (URL)">Lien</button><button class="del" data-delp="${p.id}" title="Supprimer">✕</button></td>`:""}</tr>`;
     }).join("") : `<tr><td colspan="10" class="empty">Aucun produit.</td></tr>`}
   </table></div></div>`;
 }
@@ -1422,7 +1464,7 @@ function vClients(){
     const prospects = (webSignups||[]).filter(s=> s.email && !known.has((s.email||"").toLowerCase()) && !known.has((s.name||"").toLowerCase()));
     if(!FB.ok) return "";
     return `<div class="panel" style="border-left:4px solid var(--terra)">
-      <h3 style="margin-bottom:4px">🌱 Clients potentiels — inscrits sur le portail (${prospects.length})</h3>
+      <h3 style="margin-bottom:4px">Clients potentiels — inscrits sur le portail (${prospects.length})</h3>
       <p class="muted" style="margin-bottom:10px">Ces personnes ont créé un compte sur le portail mais n'ont pas encore commandé. Ajoutez-les à votre base pour les relancer.</p>
       ${prospects.length?`<div class="tablewrap"><table><tr><th>Nom</th><th>Type</th><th>Zone</th><th>Téléphone</th><th>Email</th><th>Inscrit le</th>${cm?"<th></th>":""}</tr>
         ${prospects.map(s=>`<tr><td><b>${esc(s.name||"")}</b></td><td class="muted">${esc(s.type||"—")}</td><td>${esc(s.zone||"—")}</td><td>${esc(s.phone||"—")}</td><td class="muted">${esc(s.email||"")}</td><td class="muted">${(s.created||"").slice(0,10)}</td>
@@ -1434,6 +1476,22 @@ function vClients(){
 
 /* ================== DEVIS ================== */
 let quoteDraft = null;
+/* ===== Vague 5 — réception fournisseur → entrée de stock automatique ===== */
+let purchaseDraft = null;
+function freshPurchaseDraft(){ return { supplierId:(S.suppliers[0]&&S.suppliers[0].id)||null, ref:"", amount:0, date:today(), status:"Commandé", lines:[] }; }
+function applyPurchaseStock(p){
+  if(!p || p.stockApplied || !Array.isArray(p.lines) || !p.lines.length) return 0;
+  let units=0;
+  p.lines.forEach(l=>{
+    const prod=S.products.find(x=>x.id===l.productId); if(!prod) return;
+    const qty=+l.qty||0; if(qty<=0) return;
+    const lineCost=+l.cost||0;
+    if(lineCost>0){ const oldQ=Math.max(0,+prod.stock||0), oldC=+prod.cost||0, newQ=oldQ+qty; prod.cost = newQ>0 ? Math.round((oldQ*oldC + qty*lineCost)/newQ) : lineCost; }
+    prod.stock=(+prod.stock||0)+qty; units+=qty;
+  });
+  p.stockApplied=true; p.received=true; p.receivedAt=today(); if(p.status!=="Reçu") p.status="Reçu";
+  return units;
+}
 function quoteTotal(q){ return (q.lines||[]).reduce((a,l)=>a+l.qty*l.price,0); }
 function quoteTVA(q){ if(q.tvaApplicable===false || !tvaRate()) return 0; const t=quoteTotal(q); return t - t/(1+tvaRate()/100); }
 function vQuotes(){
@@ -1448,7 +1506,7 @@ function vQuotes(){
       form = `<div class="panel"><h3>Nouveau devis — N° ${"DEV-"+String(S.quoteSeq).padStart(4,"0")}</h3>
       <div class="grid2">
         <div><label>Client</label><select id="q-client">${S.clients.map(c=>`<option value="${c.id}" ${c.id==quoteDraft.clientId?"selected":""}>${esc(c.name)}</option>`).join("")}</select>
-          ${(()=>{ const cl=clientById(quoteDraft.clientId); if(!cl) return ""; const nbn=cl.customPrices?Object.keys(cl.customPrices).length:0; return `<div class="muted" style="margin-top:4px">💳 Tarif : <b style="color:var(--terra)">${esc(clientTariffLabel(cl))}</b>${nbn?` · ${nbn} prix négocié(s)`:""}</div>`; })()}
+          ${(()=>{ const cl=clientById(quoteDraft.clientId); if(!cl) return ""; const nbn=cl.customPrices?Object.keys(cl.customPrices).length:0; return `<div class="muted" style="margin-top:4px">Tarif : <b style="color:var(--terra)">${esc(clientTariffLabel(cl))}</b>${nbn?` · ${nbn} prix négocié(s)`:""}</div>`; })()}
         </div>
         <div><label>Date</label><input id="q-date" type="date" value="${quoteDraft.date}"></div>
         <div><label>Valable jusqu'au</label><input id="q-valid" type="date" value="${quoteDraft.validity}"></div>
@@ -1461,7 +1519,7 @@ function vQuotes(){
           <input type="number" min="1" value="${l.qty}" data-qlqty="${i}">
           <input type="number" min="0" value="${l.price}" data-qlprice="${i}">
           <button class="del" data-qlrm="${i}">✕</button>
-          ${(()=>{ const cl=clientById(quoteDraft.clientId); const prod=S.products.find(p=>p.id==l.productId); const cat=+(prod?prod.price:0)||0; const net=+l.price||0; if(prod&&cl&&net<cat){ const pct=cat?Math.round((cat-net)/cat*100):0; return `<div style="grid-column:1/-1;font-size:11.5px;color:var(--vert)">${isNegotiated(prod,cl)?"💠 Prix négocié":"Catalogue "+fmt(cat)+" · −"+pct+" %"} → net <b>${fmt(net)}</b></div>`; } return ""; })()}
+          ${(()=>{ const cl=clientById(quoteDraft.clientId); const prod=S.products.find(p=>p.id==l.productId); const cat=+(prod?prod.price:0)||0; const net=+l.price||0; if(prod&&cl&&net<cat){ const pct=cat?Math.round((cat-net)/cat*100):0; return `<div style="grid-column:1/-1;font-size:11.5px;color:var(--vert)">${isNegotiated(prod,cl)?"Prix négocié":"Catalogue "+fmt(cat)+" · −"+pct+" %"} → net <b>${fmt(net)}</b></div>`; } return ""; })()}
         </div>`).join("")}
       </div>
       <div class="row"><button class="btn ghost" id="q-addline">+ Ajouter une ligne</button></div>
@@ -1481,7 +1539,7 @@ function vQuotes(){
       <td class="num">${fmt(quoteTotal(q))}</td><td class="${q.validity&&q.validity<today()&&q.status!=='converti'?'':''}" style="${q.validity&&q.validity<today()&&q.status!=='converti'?'color:var(--rouge)':''}">${q.validity?frDate(q.validity):"—"}</td>
       <td>${badge(q.status)}</td>
       <td class="row" style="gap:4px">
-        <button class="btn sm ghost" data-qpdf="${q.id}" title="Télécharger le PDF">⬇ PDF</button>
+        <button class="btn sm ghost" data-qpdf="${q.id}" title="Télécharger le PDF">PDF</button>
         ${q.status!=="converti"?`<button class="btn sm b" data-qconv="${q.id}" title="Convertir en commande">→ Commande</button>`:""}
         ${q.status!=="converti"?`<button class="btn sm ghost" data-qaccept="${q.id}" title="Marquer accepté">✓</button>`:""}
         <button class="del" data-qdel="${q.id}" title="Supprimer">✕</button>
@@ -1503,7 +1561,7 @@ function pdfQuote(q){
   if(q.validity) doc.text("Valable jusqu'au "+frDate(q.validity), W-14, 57, {align:"right"});
   doc.setTextColor(140,140,140); doc.setFontSize(8); doc.text("DEVIS POUR", 14, 36);
   doc.setTextColor(26,26,26); doc.setFont("helvetica","bold"); doc.setFontSize(12);
-  doc.text((c.name||"Client")+(c.matricule?"  ("+c.matricule+")":""), 14, 43);
+  doc.text((c.name||"Client")+(c.matricule?" ("+c.matricule+")":""), 14, 43);
   doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(80,80,80);
   let cy=48; if(c.type){ doc.text(c.type, 14, cy); cy+=4.5; } if(c.phone){ doc.text(c.phone, 14, cy); cy+=4.5; } if(c.zone){ doc.text(c.zone+", Dakar", 14, cy); cy+=4.5; }
   if(c && (clientDiscount(c)>0 || (c.customPrices&&Object.keys(c.customPrices).length))){ doc.setTextColor(200,94,45); doc.setFont("helvetica","bold"); doc.setFontSize(8.5); doc.text("Tarif : "+clientTariffLabel(c), 14, cy); cy+=5.5; doc.setFont("helvetica","normal"); doc.setTextColor(80,80,80); }
@@ -1605,7 +1663,7 @@ function vOrders(){
       form = `<div class="panel"><h3>${heading}</h3>
       <div class="grid2">
         <div><label>Client</label><select id="o-client">${S.clients.map(c=>`<option value="${c.id}" ${c.id==draft.clientId?"selected":""}>${esc(c.name)}</option>`).join("")}</select>
-          ${(()=>{ const cl=clientById(draft.clientId); if(!cl) return ""; const nbn=cl.customPrices?Object.keys(cl.customPrices).length:0; return `<div class="muted" style="margin-top:4px">💳 Tarif : <b style="color:var(--terra)">${esc(clientTariffLabel(cl))}</b>${nbn?` · ${nbn} prix négocié(s)`:""}</div>`; })()}
+          ${(()=>{ const cl=clientById(draft.clientId); if(!cl) return ""; const nbn=cl.customPrices?Object.keys(cl.customPrices).length:0; return `<div class="muted" style="margin-top:4px">Tarif : <b style="color:var(--terra)">${esc(clientTariffLabel(cl))}</b>${nbn?` · ${nbn} prix négocié(s)`:""}</div>`; })()}
         </div>
         <div><label>Date</label><input id="o-date" type="date" value="${draft.date}"></div>
         <div><label>Paiement</label><select id="o-pay"><option value="comptant" ${draft.payMode==="comptant"?"selected":""}>Comptant</option><option value="credit" ${draft.payMode==="credit"?"selected":""}>Crédit (max 3 mois)</option></select></div>
@@ -1622,15 +1680,15 @@ function vOrders(){
           <input type="number" min="1" value="${l.qty}" data-lqty="${i}" style="${over?'border:2px solid var(--rouge);background:#fce8e8':''}">
           <input type="number" min="0" value="${l.price}" data-lprice="${i}">
           <button class="del" data-lrm="${i}">✕</button>
-          ${over?`<div style="grid-column:1/-1;color:var(--rouge);font-size:12px;font-weight:600">⛔ Stock insuffisant : ${prod.stock} disponible(s) seulement</div>`:""}
-          ${(()=>{ const cl=clientById(draft.clientId); const cat=+(prod?prod.price:0)||0; const net=+l.price||0; if(prod&&cl&&net<cat){ const pct=cat?Math.round((cat-net)/cat*100):0; return `<div style="grid-column:1/-1;font-size:11.5px;color:var(--vert)">${isNegotiated(prod,cl)?"💠 Prix négocié":"Catalogue "+fmt(cat)+" · −"+pct+" %"} → net <b>${fmt(net)}</b></div>`; } return ""; })()}
+          ${over?`<div style="grid-column:1/-1;color:var(--rouge);font-size:12px;font-weight:600">Stock insuffisant : ${prod.stock} disponible(s) seulement</div>`:""}
+          ${(()=>{ const cl=clientById(draft.clientId); const cat=+(prod?prod.price:0)||0; const net=+l.price||0; if(prod&&cl&&net<cat){ const pct=cat?Math.round((cat-net)/cat*100):0; return `<div style="grid-column:1/-1;font-size:11.5px;color:var(--vert)">${isNegotiated(prod,cl)?"Prix négocié":"Catalogue "+fmt(cat)+" · −"+pct+" %"} → net <b>${fmt(net)}</b></div>`; } return ""; })()}
         </div>`;}).join("")}
       </div>
       <div class="row"><button class="btn ghost" id="o-addline">+ Ajouter une ligne</button></div>
       <div class="total">Total : ${fmt(total)}</div>
       <div class="row" style="margin-top:8px"><button class="btn" id="o-save" ${draft.lines.length?"":"disabled"}>${isEdit?"Enregistrer les modifications":"Enregistrer la commande"}</button>
       ${isEdit?'<button class="btn ghost" id="o-canceledit">Annuler la modification</button>':'<span class="muted">Livraison et paiement sont indépendants : on peut livrer sans encaisser, et inversement.</span>'}</div>
-      ${isEdit&&editOrder.delivered?'<div class="alertbox" style="margin-top:10px">⚠ Cette commande est déjà livrée. La modification ajuste le stock en conséquence.</div>':''}</div>`;
+      ${isEdit&&editOrder.delivered?'<div class="alertbox" style="margin-top:10px">Cette commande est déjà livrée. La modification ajuste le stock en conséquence.</div>':''}</div>`;
     }
   }
   const live = [...S.orders].sort((a,b)=>b.id-a.id);
@@ -1670,7 +1728,7 @@ function vCash(){
   ${can("orders_pay")?`<div class="panel" style="border-left:4px solid ${openSession?'var(--vert)':'var(--gris)'}">
     <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px;align-items:center">
       <div>
-        <h3 style="margin:0 0 2px">🧰 Session de caisse</h3>
+        <h3 style="margin:0 0 2px">Session de caisse</h3>
         ${openSession
           ? `<p class="muted" style="margin:0">Caisse <b style="color:var(--vert)">OUVERTE</b> depuis le ${frDateTime(openSession.openedAt)} par ${esc(openSession.openedBy||"—")} · Fonds initial : <b>${fmt(openSession.openingFloat||0)}</b></p>`
           : `<p class="muted" style="margin:0">Caisse <b>FERMÉE</b>. Ouvrez une session pour suivre les encaissements et générer un arrêté de caisse.</p>`}
@@ -1684,7 +1742,7 @@ function vCash(){
     </div>
   </div>`:""}
   ${can("orders_pay")?`<div class="panel"><h3>Encaisser un versement</h3>
-    ${notInvoiced>0?`<div class="infobox" style="margin-bottom:10px">📄 ${notInvoiced} commande(s) livrée(s) ne sont pas encore facturées. <b>Générez la facture</b> (onglet Commandes ou Factures) avant de pouvoir encaisser.</div>`:""}
+    ${notInvoiced>0?`<div class="infobox" style="margin-bottom:10px">${notInvoiced} commande(s) livrée(s) ne sont pas encore facturées. <b>Générez la facture</b> (onglet Commandes ou Factures) avant de pouvoir encaisser.</div>`:""}
     ${payable.length?`<div class="grid2">
       <div><label>Facture concernée</label><select id="v-order" onchange="(function(){var o=window.__payById&&window.__payById(this.value);})()">${payable.map(o=>`<option value="${o.id}" data-due="${orderDue(o)}">${esc(o.invoiceNum)} · ${esc(o.num)} — ${esc(clientName(o.clientId))} (reste ${fmt(orderDue(o))})</option>`).join("")}</select></div>
       <div><label>Montant du versement (FCFA)</label><input id="v-amount" type="number" min="1" max="${orderDue(payable[0])}" value="${orderDue(payable[0])}"></div>
@@ -1767,10 +1825,10 @@ function vSettings(){
   const co = (S.settings && S.settings.company) || {};
   return `
   <h2>Paramètres</h2>
-  <div class="infobox" style="margin-bottom:14px">⚙️ Les coordonnées ci-dessous s'appliquent <b>automatiquement à Gestion ET au portail</b> (factures, reçus, en-têtes PDF, pied de page du portail…). Modifiez-les ici, sans toucher au code.</div>
+  <div class="infobox" style="margin-bottom:14px">Les coordonnées ci-dessous s'appliquent <b>automatiquement à Gestion ET au portail</b> (factures, reçus, en-têtes PDF, pied de page du portail…). Modifiez-les ici, sans toucher au code.</div>
 
   <div class="panel">
-    <h3 style="margin-bottom:4px">🏢 Identité de l'entreprise</h3>
+    <h3 style="margin-bottom:4px">Identité de l'entreprise</h3>
     <p class="muted" style="margin-bottom:12px">Nom affiché, slogan et logo. Le logo apparaît sur les documents et peut s'afficher sur le portail.</p>
     <div class="grid2">
       <div><label>Nom du site / entreprise</label><input id="co-name" value="${esc(co.name||"")}" placeholder="DISTRIVIA"></div>
@@ -1788,7 +1846,7 @@ function vSettings(){
   </div>
 
   <div class="panel">
-    <h3 style="margin-bottom:4px">📞 Coordonnées & contacts</h3>
+    <h3 style="margin-bottom:4px">Coordonnées & contacts</h3>
     <p class="muted" style="margin-bottom:12px">Utilisées sur les factures, reçus, le portail et le bouton WhatsApp.</p>
     <div class="grid2">
       <div><label>Téléphone principal</label><input id="co-phone1" value="${esc(co.phone1||"")}" placeholder="+221 77 …"></div>
@@ -1801,13 +1859,14 @@ function vSettings(){
   </div>
 
   <div class="panel">
-    <h3 style="margin-bottom:4px">🕐 Horaires (affichés sur le portail)</h3>
+    <h3 style="margin-bottom:4px">Horaires (affichés sur le portail)</h3>
     <div class="grid2">
       <div><label>Ligne 1</label><input id="co-hours" value="${esc(co.hours||"")}" placeholder="Lundi – Samedi : 8h – 19h"></div>
       <div><label>Ligne 2</label><input id="co-hours2" value="${esc(co.hours2||"")}" placeholder="Livraison 48 h sur Dakar"></div>
       <div><label>Ligne 3</label><input id="co-hours3" value="${esc(co.hours3||"")}" placeholder="Commande WhatsApp 7j/7"></div>
     </div>
-    <div class="row" style="margin-top:14px"><button class="btn b" id="co-save">💾 Enregistrer les coordonnées</button>
+    <div class="row" style="margin-top:14px"><button class="btn b" id="co-save">Enregistrer les coordonnées</button>
+    <button class="btn ghost" id="pub-catalog">Publier le catalogue public</button>
     <span class="muted">Appliqué immédiatement sur Gestion et le portail.</span></div>
   </div>
 
@@ -1825,7 +1884,7 @@ function vSettings(){
   </div>
 
   <div class="panel">
-    <h3 style="margin-bottom:4px">💳 Catégories tarifaires & remises de gros</h3>
+    <h3 style="margin-bottom:4px">Catégories tarifaires & remises de gros</h3>
     <p class="muted" style="margin-bottom:10px">Définissez vos niveaux de prix (détail, demi-gros, gros…). Chaque catégorie applique une <b>remise automatique</b> sur le prix catalogue. Vous affectez une catégorie à chaque client dans sa fiche. Une remise personnalisée par client reste possible, et des prix négociés produit par produit se règlent dans la fiche client (bouton « Détails »).</p>
     <div class="tablewrap"><table>
       <tr><th>Catégorie</th><th class="num">Remise %</th><th></th></tr>
@@ -1837,13 +1896,13 @@ function vSettings(){
     </table></div>
     <div class="row" style="margin-top:10px;gap:8px">
       <button class="btn ghost" id="tier-add">+ Ajouter une catégorie</button>
-      <button class="btn b" id="tier-save">💾 Enregistrer les catégories</button>
+      <button class="btn b" id="tier-save">Enregistrer les catégories</button>
     </div>
     <p class="muted" style="margin-top:6px">La catégorie à 0 % correspond au prix catalogue (clients au détail). Une remise modifiée s'applique aux prochaines commandes et devis ; les documents déjà enregistrés ne changent pas.</p>
   </div>
 
   <div class="panel">
-    <h3>Programme de fidélité ⭐</h3>
+    <h3>Programme de fidélité </h3>
     <p class="muted" style="margin-bottom:10px">Chaque commande livrée crédite automatiquement des points, visibles sur la fiche client et le portail.</p>
     <div class="grid2">
       <div><label>Fidélité activée ?</label><select id="set-loyen"><option value="1" ${S.settings.loyaltyEnabled?"selected":""}>Oui</option><option value="0" ${!S.settings.loyaltyEnabled?"selected":""}>Non</option></select></div>
@@ -1856,11 +1915,11 @@ function vSettings(){
 }
 
 function vBackup(){
-  const modeTxt = store.mode==="firebase" ? "Base de données en ligne Firebase (partagée, temps réel)" : store.mode==="claude" ? "Application Claude (stockage du compte)" : store.mode==="local" ? "Navigateur de cet appareil (localStorage)" : "Mémoire temporaire ⚠";
+  const modeTxt = store.mode==="firebase" ? "Base de données en ligne Firebase (partagée, temps réel)" : store.mode==="claude" ? "Application Claude (stockage du compte)" : store.mode==="local" ? "Navigateur de cet appareil (localStorage)" : "Mémoire temporaire ";
   return `
   <h2>Sauvegarde & export</h2>
   <div class="infobox"><b>Mode de stockage :</b> ${modeTxt}.<br>
-  ${store.mode==="firebase"?"✅ Les comptes et les données sont <b>partagés entre tous les appareils</b> et se synchronisent en temps réel. Un employé connecté sur son téléphone voit les mêmes données que vous. Gardez tout de même une sauvegarde hebdomadaire par précaution.":""}
+  ${store.mode==="firebase"?"Les comptes et les données sont <b>partagés entre tous les appareils</b> et se synchronisent en temps réel. Un employé connecté sur son téléphone voit les mêmes données que vous. Gardez tout de même une sauvegarde hebdomadaire par précaution.":""}
   ${store.mode==="local"?"Les données vivent dans <b>ce navigateur, sur cet appareil</b>. Elles survivent à la fermeture et au redémarrage, mais ne se synchronisent pas entre plusieurs téléphones/ordinateurs. Pour un vrai multi-appareils, configurez Firebase (voir le guide).":""}</div>
   <div class="panel">
     <p style="margin-bottom:10px">Sauvegarde automatique à chaque action. Par sécurité, <b>exportez une copie chaque lundi</b> et gardez-la sur Drive ou WhatsApp (à vous-même).</p>
@@ -1890,7 +1949,7 @@ function vBackup(){
       <button class="btn ghost" id="bk-archives">Consulter les archives</button>
     </div>
   </div>`:""}
-  <div class="infobox">⚙️ Les paramètres fiscaux (TVA, NINEA), la fidélité et les coordonnées de l'entreprise sont désormais dans l'onglet <b>Paramètres</b>.</div>`;
+  <div class="infobox">Les paramètres fiscaux (TVA, NINEA), la fidélité et les coordonnées de l'entreprise sont désormais dans l'onglet <b>Paramètres</b>.</div>`;
 }
 
 /* ================== MODALE ================== */
@@ -1900,7 +1959,7 @@ function closeModal(){
   modalContent=null; el("modal").innerHTML="";
   if(pendingRemoteBlob){
     const b=pendingRemoteBlob; pendingRemoteBlob=null; hideSyncBanner();
-    if(savedDuringModal){ toast("⚠ Un autre utilisateur a aussi enregistré pendant votre saisie — vérifiez les données."); }
+    if(savedDuringModal){ toast("Un autre utilisateur a aussi enregistré pendant votre saisie — vérifiez les données."); }
     else { applyRemoteBlob(b); }
   }
   savedDuringModal=false;
@@ -1971,7 +2030,7 @@ async function deliverOrder(id){
   if(o.delivered) return toast("Commande déjà livrée");
   // Point 6 : on ne peut pas livrer plus que le stock disponible
   for(const l of o.lines){ const p=S.products.find(p=>p.id===l.productId);
-    if(p && p.stock<l.qty){ return toast("⛔ Stock insuffisant : "+p.name+" ("+p.stock+" en stock, "+l.qty+" demandés). Réapprovisionnez d'abord."); } }
+    if(p && p.stock<l.qty){ return toast("Stock insuffisant : "+p.name+" ("+p.stock+" en stock, "+l.qty+" demandés). Réapprovisionnez d'abord."); } }
   o.lines.forEach(l=>{ const p=S.products.find(p=>p.id===l.productId); if(p) p.stock=Math.max(0,p.stock-l.qty); });
   o.delivered=true; o.deliveredDate=today(); o.deliveredBy=me().name;
   refreshStatus(o);
@@ -2045,7 +2104,7 @@ window.cancelPayment = cancelPayment; window.cancelInvoice = cancelInvoice;
 function cancelOrderWithReason(orderId){
   if(!can("orders_cancel")) return toast("Droit insuffisant");
   const o=S.orders.find(o=>o.id===orderId); if(!o||o.status==="cancelled") return;
-  const paidWarn = orderPaid(o)>0 ? `<div style="background:#FFF3E0;border-left:3px solid var(--terra);padding:8px;border-radius:4px;margin-bottom:10px;font-size:13px">⚠ Cette commande a reçu <b>${fmt(orderPaid(o))}</b> de versements. Ils resteront tracés dans le journal.</div>` : "";
+  const paidWarn = orderPaid(o)>0 ? `<div style="background:#FFF3E0;border-left:3px solid var(--terra);padding:8px;border-radius:4px;margin-bottom:10px;font-size:13px">Cette commande a reçu <b>${fmt(orderPaid(o))}</b> de versements. Ils resteront tracés dans le journal.</div>` : "";
   el("confirm").innerHTML = `<div class="modalbg" id="cobg" style="z-index:120"><div class="modal" style="max-width:420px">
     <h3 style="color:var(--rouge);margin-bottom:8px">Annuler la commande ${esc(o.num)}</h3>
     ${paidWarn}
@@ -2128,8 +2187,8 @@ function recShell(o){
       </div>
       <div class="rectoolbar-r">
         <div class="recactions">${actions}</div>
-        <a class="reclink" href="${href}" target="_blank" rel="noopener" title="Ouvrir cette fiche dans un nouvel onglet">🗗 Nouvel onglet</a>
-        <button class="reclink" data-reccopy="${href}" title="Copier le lien de cette fiche">🔗 Lien</button>
+        <a class="reclink" href="${href}" target="_blank" rel="noopener" title="Ouvrir cette fiche dans un nouvel onglet">Nouvel onglet</a>
+        <button class="reclink" data-reccopy="${href}" title="Copier le lien de cette fiche">Lien</button>
       </div>
     </div>
     <div class="recbody">
@@ -2185,15 +2244,15 @@ function recOrderPage(id){
     ${o.status==="cancelled"&&o.cancelReason?`<div class="recfield"><div class="reclbl">Motif d'annulation</div><div class="recval" style="color:var(--rouge)">${esc(o.cancelReason)}</div></div>`:""}
   </div>`;
   const linesSection = `<div class="tablewrap"><table><tr><th>Produit</th><th class="num">Qté</th><th class="num">P.U.</th><th class="num">Total</th></tr>${lignes}</table></div>`;
-  const paysSection = `<div class="tablewrap"><table><tr><th>Date</th><th>Moyen</th><th>Par</th><th class="num">Montant</th><th></th></tr>${pays}</table></div>${due>0&&isInv?`<p class="muted" style="margin-top:8px">💰 L'encaissement des versements se fait depuis la Caisse.</p>`:""}`;
+  const paysSection = `<div class="tablewrap"><table><tr><th>Date</th><th>Moyen</th><th>Par</th><th class="num">Montant</th><th></th></tr>${pays}</table></div>${due>0&&isInv?`<p class="muted" style="margin-top:8px">L'encaissement des versements se fait depuis la Caisse.</p>`:""}`;
 
   const A=[];
   if(!o.delivered&&o.status!=="cancelled"&&can("orders_deliver")) A.push(`<button class="btn b" data-md-deliver="${o.id}">Livrer</button>`);
-  if(o.status!=="cancelled"&&can("orders_edit")) A.push(`<button class="btn ghost" data-md-edit="${o.id}">✎ Modifier</button>`);
-  A.push(`<button class="btn ghost" data-md-receipt="${o.id}">🧾 Reçu</button>`);
-  A.push(`<button class="btn" style="background:var(--vert)" data-md-bl="${o.id}">🚚 Bon de livraison${o.blNum?" ("+esc(o.blNum)+")":""}</button>`);
-  A.push(`<button class="btn b" data-md-invoice="${o.id}">📄 Facture</button>`);
-  A.push(`<button class="btn ghost" data-md-invpdf="${o.id}">⬇ PDF</button>`);
+  if(o.status!=="cancelled"&&can("orders_edit")) A.push(`<button class="btn ghost" data-md-edit="${o.id}">Modifier</button>`);
+  A.push(`<button class="btn ghost" data-md-receipt="${o.id}">Reçu</button>`);
+  A.push(`<button class="btn" style="background:var(--vert)" data-md-bl="${o.id}">Bon de livraison${o.blNum?" ("+esc(o.blNum)+")":""}</button>`);
+  A.push(`<button class="btn b" data-md-invoice="${o.id}">Facture</button>`);
+  A.push(`<button class="btn ghost" data-md-invpdf="${o.id}">PDF</button>`);
   if(o.invoiceNum&&orderPaid(o)===0&&can("orders_pay")) A.push(`<button class="btn ghost" style="color:var(--rouge)" data-md-cancelinv="${o.id}">Annuler facture</button>`);
   if(o.status!=="cancelled"&&can("orders_cancel")) A.push(`<button class="btn" style="background:var(--rouge)" data-md-cancelorder="${o.id}">Annuler commande</button>`);
 
@@ -2239,16 +2298,16 @@ function recClientPage(id){
     <div class="recfield"><div class="reclbl">Type</div><div class="recval">${esc(c.type||"—")}</div></div>
     <div class="recfield"><div class="reclbl">Zone</div><div class="recval">${esc(c.zone||"—")}</div></div>
     <div class="recfield"><div class="reclbl">Téléphone</div><div class="recval">${esc(fullPhone(c)||"—")}</div></div>
-    <div class="recfield"><div class="reclbl">Catégorie tarifaire</div><div class="recval"><span class="badge" style="background:var(--terra)">💳 ${esc(clientTariffLabel(c))}</span></div></div>
+    <div class="recfield"><div class="reclbl">Catégorie tarifaire</div><div class="recval"><span class="badge" style="background:var(--terra)">${esc(clientTariffLabel(c))}</span></div></div>
     <div class="recfield"><div class="reclbl">Dernière commande</div><div class="recval">${lastDate}</div></div>
   </div>
-  ${overdue.length?`<div class="alertbox" style="margin-top:12px">⏰ ${overdue.length} crédit(s) échu(s) : ${overdue.map(o=>esc(o.num)+" ("+fmt(orderDue(o))+")").join(", ")}</div>`:""}`;
+  ${overdue.length?`<div class="alertbox" style="margin-top:12px">${overdue.length} crédit(s) échu(s) : ${overdue.map(o=>esc(o.num)+" ("+fmt(orderDue(o))+")").join(", ")}</div>`:""}`;
   const histSection = `<div class="tablewrap"><table><tr><th>N°</th><th>Date</th><th class="num">Total</th><th class="num">Dû</th><th>Statut</th></tr>${rows}</table></div>`;
 
   const A=[];
   if(can("orders_create")) A.push(`<button class="btn b" data-md-neworder="${c.id}">+ Nouvelle commande</button>`);
   if(c.phone) A.push(`<a class="btn" style="background:#25D366" href="https://wa.me/${esc((c.dial+c.local).replace(/[^\d]/g,""))}" target="_blank" rel="noopener">WhatsApp</a>`);
-  if(canEditP) A.push(`<button class="btn ghost" data-md-cedit="${c.id}">✎ Modifier la fiche</button>`);
+  if(canEditP) A.push(`<button class="btn ghost" data-md-cedit="${c.id}">Modifier la fiche</button>`);
 
   const sum=[
     {k:"CA livré", v:fmt(caTotal), cls:"total"},
@@ -2256,11 +2315,11 @@ function recClientPage(id){
     {k:"Commandes", v:String(nbCmd)},
     {k:"Panier moyen", v:fmt(panier)},
   ];
-  if(S.settings&&S.settings.loyaltyEnabled) sum.push({k:"Points fidélité ⭐", v:String(c.points||0), cls:"paid"});
+  if(S.settings&&S.settings.loyaltyEnabled) sum.push({k:"Points fidélité ", v:String(c.points||0), cls:"paid"});
 
   const cstatus = credit>0 ? {label:"Crédit "+fmt(credit), kind:"warn"} : {label:"À jour", kind:"ok"};
   return recShell({ type:"client", id:c.id, title:c.name, sub:`${esc(c.type||"")}${c.zone?" · "+esc(c.zone):""}`, status:cstatus, actions:A,
-    sections:[ {title:"Informations principales", html:infoSection}, {title:"💠 Prix négociés (spécifiques à ce client)", html:negSection}, {title:"Historique des commandes ("+nbCmd+")", html:histSection} ],
+    sections:[ {title:"Informations principales", html:infoSection}, {title:"Prix négociés (spécifiques à ce client)", html:negSection}, {title:"Historique des commandes ("+nbCmd+")", html:histSection} ],
     summary:sum, summaryTitle:"Synthèse client" });
 }
 
@@ -2282,7 +2341,7 @@ function recSupplierPage(id){
   const histSection = `<div class="tablewrap"><table><tr><th>N°</th><th>Date</th><th>Référence</th><th class="num">Montant</th><th>Statut</th></tr>${rows}</table></div>`;
 
   const A=[];
-  if(can("suppliers")) A.push(`<button class="btn ghost" data-md-sedit="${s.id}">✎ Modifier la fiche</button>`);
+  if(can("suppliers")) A.push(`<button class="btn ghost" data-md-sedit="${s.id}">Modifier la fiche</button>`);
 
   const sum=[
     {k:"Total achats", v:fmt(total), cls:"total"},
@@ -2316,11 +2375,11 @@ function recProductPage(id){
     <div class="recfield"><div class="reclbl">Marge unitaire</div><div class="recval" style="color:var(--vert)"><b>${margePct} %</b> (${fmt(marge)})</div></div>
     <div class="recfield"><div class="reclbl">Seuil d'alerte</div><div class="recval">${p.alert||0}</div></div>
   </div>
-  ${stockLow?`<div class="alertbox" style="margin-top:12px">⚠ Stock bas (seuil : ${p.alert||0}). Pensez à réapprovisionner.</div>`:""}`;
+  ${stockLow?`<div class="alertbox" style="margin-top:12px">Stock bas (seuil : ${p.alert||0}). Pensez à réapprovisionner.</div>`:""}`;
   const histSection = `<div class="tablewrap"><table><tr><th>N°</th><th>Date</th><th>Client</th><th class="num">Qté</th><th class="num">Montant</th></tr>${rows}</table></div>`;
 
   const A=[];
-  if(can("products_manage")) A.push(`<button class="btn ghost" data-md-pedit="${p.id}">✎ Modifier le produit</button>`);
+  if(can("products_manage")) A.push(`<button class="btn ghost" data-md-pedit="${p.id}">Modifier le produit</button>`);
 
   const sum=[
     {k:"En stock", v:String(p.stock), cls:stockLow?"due":""},
@@ -2359,7 +2418,7 @@ function recQuotePage(id){
   const linesSection = `<div class="tablewrap"><table><tr><th>Désignation</th><th class="num">Qté</th><th class="num">P.U.</th><th class="num">Montant</th></tr>${lignes}</table></div>`;
 
   const A=[];
-  A.push(`<button class="btn ghost" data-q-pdf="${q.id}">⬇ PDF</button>`);
+  A.push(`<button class="btn ghost" data-q-pdf="${q.id}">PDF</button>`);
   if(q.status!=="converti") A.push(`<button class="btn b" data-q-conv="${q.id}">→ Convertir en commande</button>`);
   if(q.status!=="converti"&&q.status!=="accepté") A.push(`<button class="btn" style="background:var(--vert)" data-q-accept="${q.id}">✓ Marquer accepté</button>`);
 
@@ -2442,7 +2501,7 @@ function openOrderDetail(id){
     </div>
     ${orderTVA(o)>0?`<p class="muted" style="margin-bottom:6px">HT : ${fmt(orderHT(o))} · TVA (${tvaRate()} %) : ${fmt(orderTVA(o))} · TTC : ${fmt(orderTotal(o))}</p>`:`<p class="muted" style="margin-bottom:6px">${tvaRate()&&!o.tvaApplicable?"Commande non assujettie à la TVA":""}</p>`}
     <p style="margin-bottom:4px"><b>Client :</b> ${esc(c.name||"—")} ${c.phone?"· "+esc(c.phone):""} ${c.zone?"· "+esc(c.zone):""}</p>
-    <p class="muted" style="margin-bottom:10px">Date ${o.date} · ${o.payMode==="credit"?"Crédit"+(o.dueDate?" éch. "+o.dueDate:""):"Comptant"} · Livraison : ${o.delivered?("livrée"+(o.deliveredDate?" le "+o.deliveredDate:"")+(o.deliveredBy?" par "+esc(o.deliveredBy):"")):"non livrée"} ${o.status==="cancelled"?'· <span style="color:var(--rouge)">ANNULÉE'+(o.cancelReason?" ("+esc(o.cancelReason)+")":"")+'</span>':""} ${overdue?'· <span style="color:var(--rouge)">⏰ échue</span>':""}</p>
+    <p class="muted" style="margin-bottom:10px">Date ${o.date} · ${o.payMode==="credit"?"Crédit"+(o.dueDate?" éch. "+o.dueDate:""):"Comptant"} · Livraison : ${o.delivered?("livrée"+(o.deliveredDate?" le "+o.deliveredDate:"")+(o.deliveredBy?" par "+esc(o.deliveredBy):"")):"non livrée"} ${o.status==="cancelled"?'· <span style="color:var(--rouge)">ANNULÉE'+(o.cancelReason?" ("+esc(o.cancelReason)+")":"")+'</span>':""} ${overdue?'· <span style="color:var(--rouge)">échue</span>':""}</p>
     <h4 style="margin:8px 0 4px;color:var(--bleu)">Articles</h4>
     <div class="tablewrap"><table><tr><th>Produit</th><th class="num">Qté</th><th class="num">P.U.</th><th class="num">Total</th></tr>${lignes}</table></div>
     <h4 style="margin:12px 0 4px;color:var(--bleu)">Versements</h4>
@@ -2451,10 +2510,10 @@ function openOrderDetail(id){
       ${!o.delivered&&o.status!=="cancelled"&&can("orders_deliver")?`<button class="btn b" data-md-deliver="${o.id}">Livrer</button>`:""}
       ${o.status!=="cancelled"&&can("orders_edit")?`<button class="btn ghost" data-md-edit="${o.id}">Modifier</button>`:""}
       <button class="btn ghost" data-md-receipt="${o.id}">Reçu / imprimer</button>
-      <button class="btn" style="background:var(--vert)" data-md-bl="${o.id}">🚚 Bon de livraison${o.blNum?" ("+esc(o.blNum)+")":""}</button>
-      <button class="btn b" data-md-invoice="${o.id}">📄 Facture</button>
-      <button class="btn ghost" data-md-invpdf="${o.id}">⬇ PDF</button>
-      ${due>0&&o.invoiceNum?`<span class="muted" style="align-self:center;font-size:13px">💰 Encaissement à la Caisse</span>`:""}
+      <button class="btn" style="background:var(--vert)" data-md-bl="${o.id}">Bon de livraison${o.blNum?" ("+esc(o.blNum)+")":""}</button>
+      <button class="btn b" data-md-invoice="${o.id}">Facture</button>
+      <button class="btn ghost" data-md-invpdf="${o.id}">PDF</button>
+      ${due>0&&o.invoiceNum?`<span class="muted" style="align-self:center;font-size:13px">Encaissement à la Caisse</span>`:""}
       ${o.invoiceNum&&orderPaid(o)===0&&can("orders_pay")?`<button class="btn ghost" style="color:var(--rouge)" data-md-cancelinv="${o.id}">Annuler facture</button>`:""}
       ${o.status!=="cancelled"&&can("orders_cancel")?`<button class="btn" style="background:var(--rouge)" data-md-cancelorder="${o.id}">Annuler commande</button>`:""}
       <button class="btn ghost" onclick="closeModal()">Fermer</button>
@@ -2487,22 +2546,22 @@ function openClientDetail(id){
   const rows = co.length? co.map(o=>`<tr style="cursor:pointer" data-md-order="${o.id}"><td><b>${esc(o.num)}</b></td><td>${o.date}</td><td class="num">${fmt(orderTotal(o))}</td><td class="num">${orderDue(o)?'<span style="color:var(--terra)">'+fmt(orderDue(o))+'</span>':"—"}</td><td>${deliveryLabel(o)} ${payLabel(o)}</td></tr>`).join("") : `<tr><td colspan="5" class="empty">Aucune commande.</td></tr>`;
   openModal(`<div class="row" style="justify-content:space-between"><h3>${esc(c.name)}</h3><button class="x" onclick="closeModal()">×</button></div>
     <p class="muted">${c.matricule?`<b style="color:var(--bleu)">${esc(c.matricule)}</b> · `:""}${esc(c.type)} · ${esc(c.zone||"—")} · ${esc(fullPhone(c)||"—")}</p>
-    <p style="margin:-4px 0 2px"><span class="badge" style="background:var(--terra)">💳 ${esc(clientTariffLabel(c))}</span></p>
+    <p style="margin:-4px 0 2px"><span class="badge" style="background:var(--terra)">${esc(clientTariffLabel(c))}</span></p>
     <div class="cards" style="margin:10px 0">
       <div class="card"><div class="v" style="font-size:16px">${fmt(caTotal)}</div><div class="l">CA total (livré)</div></div>
       <div class="card t"><div class="v" style="font-size:16px">${fmt(credit)}</div><div class="l">Crédit en cours</div></div>
       <div class="card"><div class="v" style="font-size:16px">${nbCmd}</div><div class="l">Commandes</div></div>
       <div class="card"><div class="v" style="font-size:16px">${fmt(panier)}</div><div class="l">Panier moyen</div></div>
-      ${S.settings&&S.settings.loyaltyEnabled?`<div class="card t"><div class="v" style="font-size:16px">${c.points||0}</div><div class="l">Points fidélité ⭐</div></div>`:""}
+      ${S.settings&&S.settings.loyaltyEnabled?`<div class="card t"><div class="v" style="font-size:16px">${c.points||0}</div><div class="l">Points fidélité </div></div>`:""}
     </div>
-    ${overdue.length?`<div class="alertbox">⏰ ${overdue.length} crédit(s) échu(s) : ${overdue.map(o=>esc(o.num)+" ("+fmt(orderDue(o))+")").join(", ")}</div>`:""}
+    ${overdue.length?`<div class="alertbox">${overdue.length} crédit(s) échu(s) : ${overdue.map(o=>esc(o.num)+" ("+fmt(orderDue(o))+")").join(", ")}</div>`:""}
     <p class="muted" style="margin-bottom:6px">Dernière commande : ${lastDate}</p>
     ${(()=>{
       const canEditP = can("clients_edit")||can("clients_manage");
       const cp = c.customPrices||{};
       const keys = Object.keys(cp).filter(pid=>S.products.some(p=>p.id===+pid));
       const rows = keys.map(pid=>{ const p=S.products.find(p=>p.id===+pid); const cat=+p.price||0; const net=+cp[pid]; const pct=cat?Math.round((cat-net)/cat*100):0; return `<tr><td>${esc(p.name)}</td><td class="num muted">${fmt(cat)}</td><td class="num"><b style="color:var(--vert)">${fmt(net)}</b></td><td class="num">${pct>0?"−"+pct+" %":(pct<0?"+"+(-pct)+" %":"—")}</td>${canEditP?`<td><button class="del" data-cp-rm="${pid}" title="Retirer">✕</button></td>`:""}</tr>`; }).join("");
-      return `<h4 style="margin:12px 0 4px;color:var(--bleu)">💠 Prix négociés (spécifiques à ce client)</h4>
+      return `<h4 style="margin:12px 0 4px;color:var(--bleu)">Prix négociés (spécifiques à ce client)</h4>
         ${keys.length?`<div class="tablewrap"><table><tr><th>Produit</th><th class="num">Catalogue</th><th class="num">Prix négocié</th><th class="num">Écart</th>${canEditP?"<th></th>":""}</tr>${rows}</table></div>`:`<p class="muted" style="margin:0 0 6px">Aucun prix négocié.${canEditP?" Ajoutez-en un ci-dessous : il sera prioritaire sur la catégorie tarifaire pour ce client.":""}</p>`}
         ${canEditP&&S.products.length?`<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px">
           <select id="cp-prod" style="flex:1;min-width:150px">${S.products.map(p=>`<option value="${p.id}">${esc(p.name)} — catalogue ${fmt(p.price)}</option>`).join("")}</select>
@@ -2575,7 +2634,7 @@ function openProductDetail(id){
     ${p.img?`<div style="text-align:center;margin:8px 0"><img src="${p.img}" style="max-width:200px;max-height:200px;border-radius:12px;border:1px solid #eee"></div>`:""}
     <p class="muted">${esc(p.family||"—")}</p>
     <div class="cards" style="margin:10px 0">
-      <div class="card ${stockLow?'t':''}"><div class="v" style="font-size:16px">${p.stock}</div><div class="l">En stock${stockLow?" ⚠":""}</div></div>
+      <div class="card ${stockLow?'t':''}"><div class="v" style="font-size:16px">${p.stock}</div><div class="l">En stock${stockLow?" ":""}</div></div>
       <div class="card"><div class="v" style="font-size:16px">${fmt(p.price)}</div><div class="l">Prix de vente</div></div>
       <div class="card"><div class="v" style="font-size:16px">${fmt(p.cost||0)}</div><div class="l">Coût d'achat</div></div>
       <div class="card g"><div class="v" style="font-size:16px">${margePct}%</div><div class="l">Marge unitaire</div></div>
@@ -2586,7 +2645,7 @@ function openProductDetail(id){
       <div class="card g"><div class="v" style="font-size:16px">${fmt(margeGen)}</div><div class="l">Marge générée</div></div>
       <div class="card"><div class="v" style="font-size:16px">${fmt(p.stock*(p.cost||0))}</div><div class="l">Valeur du stock</div></div>
     </div>
-    ${stockLow?`<div class="alertbox">⚠ Stock bas (seuil d'alerte : ${p.alert||0}). Pensez à réapprovisionner.</div>`:""}
+    ${stockLow?`<div class="alertbox">Stock bas (seuil d'alerte : ${p.alert||0}). Pensez à réapprovisionner.</div>`:""}
     <h4 style="margin:8px 0 4px;color:var(--bleu)">Ventes récentes</h4>
     <div class="tablewrap"><table><tr><th>N°</th><th>Date</th><th>Client</th><th class="num">Qté</th><th class="num">Montant</th></tr>${rows}</table></div>
     <div class="row" style="margin-top:14px">
@@ -2609,7 +2668,7 @@ function openClaimThread(id){
     ${replies.map(r=>`<div style="background:${r.from==="DISTRIVIA"?"#0F2A4A":"#F5F1E8"};color:${r.from==="DISTRIVIA"?"#fff":"#1A1A1A"};border-radius:8px;padding:10px;margin:4px 0;${r.from==="DISTRIVIA"?"margin-left:30px":"margin-right:30px"}">
       <div style="font-size:11px;opacity:.8">${esc(r.from)} · ${(r.date||"").slice(0,16).replace("T"," ")}</div>
       <div style="margin-top:3px">${esc(r.text)}</div></div>`).join("")}`;
-  openModal(`<div class="row" style="justify-content:space-between"><h3>💬 ${esc(c.author_name||"Client")}</h3><button class="x" onclick="closeModal()">×</button></div>
+  openModal(`<div class="row" style="justify-content:space-between"><h3>${esc(c.author_name||"Client")}</h3><button class="x" onclick="closeModal()">×</button></div>
     <p class="muted">${esc(c.type||"Message")}${c.ref?" · réf. "+esc(c.ref):""} · <span class="badge ${c.status==="resolved"?"paid":"pending"}">${c.status==="resolved"?"Traitée":"Ouverte"}</span></p>
     <div style="max-height:40vh;overflow:auto;margin:10px 0">${thread}</div>
     <label>Votre réponse</label><textarea id="cl-reply" rows="3" placeholder="Écrivez votre réponse au client..."></textarea>
@@ -2731,7 +2790,7 @@ function pdfInvoice(o){
   // client
   doc.setTextColor(140,140,140); doc.setFontSize(8); doc.text("FACTURÉ À", 14, 36);
   doc.setTextColor(26,26,26); doc.setFont("helvetica","bold"); doc.setFontSize(12);
-  doc.text((c.name||"Client")+(c.matricule?"  ("+c.matricule+")":""), 14, 43);
+  doc.text((c.name||"Client")+(c.matricule?" ("+c.matricule+")":""), 14, 43);
   doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(80,80,80);
   let cy=48; if(c.type){ doc.text(c.type, 14, cy); cy+=4.5; }
   if(c.phone){ doc.text(c.phone, 14, cy); cy+=4.5; }
@@ -2966,7 +3025,7 @@ function showCashHistory(){
     ${closed.length?closed.map(s=>`<tr><td>${frDateTime(s.openedAt)}</td><td>${frDateTime(s.closedAt)}</td><td class="muted">${esc(s.closedBy||"")}</td>
       <td class="num">${fmt(s.openingFloatSnap||0)}</td><td class="num" style="color:var(--vert)">${fmt(s.totalIn||0)}</td><td class="num">${fmt(s.countedAmount||0)}</td>
       <td class="num" style="color:${(s.gap||0)===0?'var(--vert)':(s.gap>0?'var(--terra)':'var(--rouge)')};font-weight:700">${s.gap>0?"+":""}${fmt(s.gap||0)}</td>
-      <td><button class="btn sm ghost" data-cspdf="${s.id}">⬇ Arrêté</button></td></tr>`).join(""):`<tr><td colspan="8" class="empty">Aucune session clôturée.</td></tr>`}
+      <td><button class="btn sm ghost" data-cspdf="${s.id}">Arrêté</button></td></tr>`).join(""):`<tr><td colspan="8" class="empty">Aucune session clôturée.</td></tr>`}
     </table></div>`);
   el("modal").querySelectorAll("[data-cspdf]").forEach(b=> b.onclick=()=>{ const s=S.cashSessions.find(x=>x.id===+b.dataset.cspdf); if(s) downloadCashClosingPDF(s); });
 }
@@ -3176,8 +3235,7 @@ function tvaDeclarationHTML(from, to){
       ${ligne(d.aPayer>=0?"TVA NETTE À PAYER":"CRÉDIT DE TVA À REPORTER", null, Math.abs(d.aPayer), true)}
     </table>
 
-    <div style="margin-top:14px;font-size:11px;color:#666;line-height:1.6">
-      <b>Calcul :</b> TVA à payer = TVA collectée (${fmt(d.collectee)}) − TVA déductible (${fmt(d.deductible)}) = <b>${fmt(d.aPayer)}</b>.<br>
+    <div style="margin-top:14px;font-size:11px;color:#666;line-height:1.6"><b>Calcul :</b> TVA à payer = TVA collectée (${fmt(d.collectee)}) − TVA déductible (${fmt(d.deductible)}) = <b>${fmt(d.aPayer)}</b>.<br>
       Document généré automatiquement par DISTRIVIA Gestion le ${frDate(today())}. À rapprocher de votre déclaration officielle (régime du réel, dépôt mensuel avant le 15 du mois suivant).
     </div>
     <div style="margin-top:26px;display:flex;justify-content:space-between;font-size:11px;color:#888">
@@ -3283,22 +3341,36 @@ function vSuppliers(){
       :`<tr><td colspan="7" class="empty">Aucun fournisseur.</td></tr>`}
     </table></div></div>
   <div class="panel"><h3>Enregistrer un achat / approvisionnement</h3>
-    ${S.suppliers.length?`<div class="grid2">
-      <div><label>Fournisseur</label><select id="pu-sup">${S.suppliers.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join("")}</select></div>
-      <div><label>Référence / description</label><input id="pu-ref" placeholder="Ex. Conteneur 20' boîtes kraft"></div>
-      <div><label>Montant total (FCFA, rendu Dakar)</label><input id="pu-amount" type="number" min="0" placeholder="18000000"></div>
-      <div><label>Date</label><input id="pu-date" type="date" value="${today()}"></div>
-      <div><label>Statut</label><select id="pu-status"><option>Commandé</option><option>Payé acompte</option><option>En transit</option><option>Reçu</option></select></div>
-    </div><div class="row" style="margin-top:10px"><button class="btn" id="pu-add">Enregistrer l'achat</button>
-    <span class="muted">Les achats payés alimentent la comptabilité (compte 601) et la caisse si réglés.</span></div>`:`<p class="empty">Ajoutez d'abord un fournisseur.</p>`}
+    ${S.suppliers.length?(()=>{ const PD = purchaseDraft || (purchaseDraft=freshPurchaseDraft()); const linesSub=(PD.lines||[]).reduce((a,l)=>a+(+l.qty||0)*(+l.cost||0),0); return `<div class="grid2">
+      <div><label>Fournisseur</label><select id="pu-sup">${S.suppliers.map(s=>`<option value="${s.id}" ${s.id==PD.supplierId?"selected":""}>${esc(s.name)}</option>`).join("")}</select></div>
+      <div><label>Référence / description</label><input id="pu-ref" value="${esc(PD.ref||"")}" placeholder="Ex. Conteneur 20' boîtes kraft"></div>
+      <div><label>Date</label><input id="pu-date" type="date" value="${PD.date||today()}"></div>
+      <div><label>Statut</label><select id="pu-status">${["Commandé","Payé acompte","En transit","Reçu"].map(o=>`<option ${PD.status===o?"selected":""}>${o}</option>`).join("")}</select></div>
+    </div>
+    <div style="margin-top:12px"><div class="row" style="justify-content:space-between;align-items:center"><label style="margin:0">Produits réceptionnés <span class="muted">(optionnel — alimente le stock)</span></label><button class="btn sm ghost" id="pu-addline">+ Ligne produit</button></div>
+      ${(PD.lines||[]).length?`<div class="tablewrap" style="margin-top:6px"><table><tr><th>Produit</th><th style="width:90px">Quantité</th><th style="width:140px">Coût unit. rendu</th><th></th></tr>
+        ${PD.lines.map((l,i)=>`<tr>
+          <td><select data-pl-prod="${i}">${S.products.map(p=>`<option value="${p.id}" ${p.id==l.productId?"selected":""}>${esc(p.name)}</option>`).join("")}</select></td>
+          <td><input type="number" min="1" data-pl-qty="${i}" value="${l.qty||1}" style="width:80px"></td>
+          <td><input type="number" min="0" data-pl-cost="${i}" value="${l.cost||0}" style="width:120px"></td>
+          <td><button class="del" data-pl-del="${i}">✕</button></td></tr>`).join("")}
+      </table></div>
+      <div class="muted" style="margin-top:4px">Sous-total lignes : <b>${fmt(linesSub)}</b> · le passage au statut <b>« Reçu »</b> ajoute ces quantités au stock (coût moyen pondéré).</div>`:`<div class="muted" style="margin-top:6px">Sans ligne produit, l'achat reste une simple écriture comptable (comme avant). Ajoutez des lignes pour alimenter le stock automatiquement à la réception.</div>`}
+    </div>
+    <div class="grid2" style="margin-top:10px">
+      <div><label>Montant total (FCFA, rendu Dakar)</label><input id="pu-amount" type="number" min="0" value="${PD.amount||""}" placeholder="${linesSub||18000000}"></div>
+      <div style="display:flex;align-items:flex-end"><span class="muted">Inclut fret &amp; douane. Pré-rempli depuis les lignes, ajustable.</span></div>
+    </div>
+    <div class="row" style="margin-top:10px"><button class="btn" id="pu-add">Enregistrer l'achat</button>
+    <span class="muted">Les achats payés alimentent la comptabilité (compte 601) et la caisse si réglés.</span></div>`;})():`<p class="empty">Ajoutez d'abord un fournisseur.</p>`}
   </div>
   <div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">Historique des achats (${S.purchases.length})</h3>
     <div class="row"><button class="btn sm b" id="exp-purchases-xlsx">Excel</button><button class="btn sm ghost" id="exp-purchases-csv">CSV</button></div></div>
     <div class="tablewrap"><table><tr><th>N°</th><th>Date</th><th>Fournisseur</th><th>Référence</th><th class="num">Montant</th><th>Statut</th><th></th></tr>
     ${S.purchases.length?[...S.purchases].sort((a,b)=>b.id-a.id).map(p=>{const s=S.suppliers.find(x=>x.id===p.supplierId);
-      return `<tr><td><b>${esc(p.num)}</b></td><td>${p.date}</td><td>${esc(s?s.name:"—")}</td><td class="muted">${esc(p.ref)}</td>
+      return `<tr><td><b>${esc(p.num)}</b></td><td>${p.date}</td><td>${esc(s?s.name:"—")}</td><td class="muted">${esc(p.ref)}${Array.isArray(p.lines)&&p.lines.length?`<div class="muted" style="font-size:11px">${p.lines.length} produit(s)${p.stockApplied?" · stock reçu ✓":""}</div>`:""}</td>
       <td class="num">${fmt(p.amount)}</td><td><span class="badge ${p.status==="Reçu"?"ok":p.status==="En transit"?"delivered":"pending"}">${esc(p.status)}</span></td>
-      <td class="row"><select data-pustatus="${p.id}" style="width:120px;padding:4px"><option ${p.status==="Commandé"?"selected":""}>Commandé</option><option ${p.status==="Payé acompte"?"selected":""}>Payé acompte</option><option ${p.status==="En transit"?"selected":""}>En transit</option><option ${p.status==="Reçu"?"selected":""}>Reçu</option></select><button class="del" data-delpu="${p.id}">✕</button></td></tr>`;}).join("")
+      <td class="row">${(Array.isArray(p.lines)&&p.lines.length&&!p.stockApplied)?`<button class="btn sm b" data-rcvpu="${p.id}">Réceptionner</button> `:""}<select data-pustatus="${p.id}" style="width:120px;padding:4px"><option ${p.status==="Commandé"?"selected":""}>Commandé</option><option ${p.status==="Payé acompte"?"selected":""}>Payé acompte</option><option ${p.status==="En transit"?"selected":""}>En transit</option><option ${p.status==="Reçu"?"selected":""}>Reçu</option></select><button class="del" data-delpu="${p.id}">✕</button></td></tr>`;}).join("")
       :`<tr><td colspan="7" class="empty">Aucun achat.</td></tr>`}
     </table></div></div>`;
 }
@@ -3320,7 +3392,7 @@ function vLogistics(){
   </div>
   <div class="panel"><h3>Tournées de livraison par zone</h3>
     ${Object.keys(byZone).length?Object.entries(byZone).map(([z,os])=>`<div style="margin-bottom:12px">
-      <div style="font-weight:700;color:var(--bleu);margin-bottom:4px">📍 ${esc(z)} — ${os.length} livraison(s)</div>
+      <div style="font-weight:700;color:var(--bleu);margin-bottom:4px">${esc(z)} — ${os.length} livraison(s)</div>
       <div class="tablewrap"><table><tr><th>N°</th><th>Client</th><th>Téléphone</th><th>Adresse / livraison</th><th class="num">Total</th><th>Paiement prévu</th><th></th></tr>
       ${os.map(o=>{const c=S.clients.find(c=>c.id===o.clientId)||{};
         const tel = o.deliveryPhone || c.phone || "—";
@@ -3401,10 +3473,10 @@ function tvaDeclarationPanel(f,t){
   return `
   <div class="panel">
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
-      <h3 style="margin:0">📋 Déclaration de TVA (${rate} %)</h3>
+      <h3 style="margin:0">Déclaration de TVA (${rate} %)</h3>
       <button class="btn sm b" id="tva-pdf">Exporter la déclaration (PDF)</button>
     </div>
-    <p class="muted" style="margin-bottom:10px">Période : ${f||"depuis le début"} → ${t||"aujourd'hui"}. ${f&&t?"":"⚠ Définissez une période ci-dessus pour une déclaration mensuelle officielle."}</p>
+    <p class="muted" style="margin-bottom:10px">Période : ${f||"depuis le début"} → ${t||"aujourd'hui"}. ${f&&t?"":"Définissez une période ci-dessus pour une déclaration mensuelle officielle."}</p>
     <div class="cards">
       <div class="card"><div class="v" style="font-size:16px">${fmt(d.baseHT)}</div><div class="l">Base imposable (HT)</div></div>
       <div class="card g"><div class="v" style="font-size:16px">${fmt(d.collectee)}</div><div class="l">TVA collectée (ventes)</div></div>
@@ -3446,7 +3518,7 @@ function vAccounting(){
   </div><p class="muted" style="margin-top:6px">Écritures générées automatiquement depuis les ventes, encaissements, achats et dépenses. Plan de comptes SYSCOHADA simplifié.</p></div>
 
   <div class="panel" style="border-left:4px solid var(--terra)">
-    <h3 style="margin-bottom:4px">📊 Clôture comptable (closing)</h3>
+    <h3 style="margin-bottom:4px">Clôture comptable (closing)</h3>
     <p class="muted" style="margin-bottom:10px">Générez un dossier de clôture professionnel en PDF : compte de résultat, bilan simplifié, balance et indicateurs clés.</p>
     <div class="row" style="align-items:flex-end;flex-wrap:wrap;gap:10px">
       <div><label>Clôture mensuelle</label><select id="cl-month">${monthsList.map(m=>`<option value="${m}">${monthLabelFr(m)}</option>`).join("")}</select></div>
@@ -3627,7 +3699,7 @@ function pdfClosing(from, to, kind, label){
   y+=3;
   row("CHARGES D'EXPLOITATION","",{bold:true,color:[15,42,74]});
   row("Coût d'achat des marchandises vendues", d.cogs);
-  Object.entries(d.chargesByCat).forEach(([c,v])=> row("  "+c, v));
+  Object.entries(d.chargesByCat).forEach(([c,v])=> row(" "+c, v));
   const totCharges=d.cogs+d.depenses;
   row("Total charges", totCharges, {bold:true, fill:[245,241,232]});
   y+=4;
@@ -3771,7 +3843,7 @@ function vControl(){
     <div class="card"><div class="v">${nbCmd}</div><div class="l">Commandes livrées</div></div>
   </div>
 
-  ${can("control")?`<div class="panel"><h3>🎯 Fixer les objectifs du mois (${curMonth})</h3>
+  ${can("control")?`<div class="panel"><h3>Fixer les objectifs du mois (${curMonth})</h3>
     <div class="grid2">
       <div><label>Objectif CA (FCFA)</label><input type="number" min="0" id="ob-ca" value="${co.ca||""}" placeholder="ex. 2000000"></div>
       <div><label>Objectif marge (FCFA)</label><input type="number" min="0" id="ob-marge" value="${co.marge||""}" placeholder="ex. 600000"></div>
@@ -3782,7 +3854,7 @@ function vControl(){
     <div class="row" style="margin-top:10px"><button class="btn" id="ob-save">Enregistrer les objectifs de ${curMonth}</button></div>
   </div>`:""}
 
-  <div class="panel"><h3>📊 Objectifs vs réalisé — suivi des écarts</h3><div class="tablewrap"><table>
+  <div class="panel"><h3>Objectifs vs réalisé — suivi des écarts</h3><div class="tablewrap"><table>
     <tr><th>Mois</th><th class="num">CA réalisé</th><th class="num">Écart</th><th class="num">Atteinte</th><th class="num">Marge réal.</th><th class="num">Écart</th><th class="num">Atteinte</th><th class="num">Cmd</th><th class="num">Atteinte</th></tr>
     ${rows.map(r=>`<tr><td><b>${r.mk}</b></td>
       ${varCell(r.a.ca, +r.o.ca||0)}
@@ -3795,7 +3867,7 @@ function vControl(){
       <td class="num">${sum.orders}${objSum.orders?` / ${objSum.orders}`:""}</td><td class="num">${objSum.orders?Math.round(sum.orders/objSum.orders*100)+' %':'—'}</td>
     </tr>
   </table></div>
-  <p class="muted" style="margin-top:6px">🟢 ≥100 % atteint · 🟠 80–99 % · 🔴 &lt;80 %. Définissez les objectifs mois par mois ci-dessus.</p>
+  <p class="muted" style="margin-top:6px">≥100 % atteint · 80–99 % · &lt;80 %. Définissez les objectifs mois par mois ci-dessus.</p>
   </div>
 
   <div class="grid2">
@@ -3893,7 +3965,7 @@ function vMonitoring(){
     <div class="panel"><h3>Commandes créées vs livrées</h3><canvas id="mo-orders" height="170"></canvas></div>
   </div>
 
-  ${isAdmin()?`<div class="panel"><h3>🎯 Objectifs individuels (encaissement)</h3>
+  ${isAdmin()?`<div class="panel"><h3>Objectifs individuels (encaissement)</h3>
     <div class="grid2">
       <div><label>Collaborateur</label><select id="mob-who">${actors.map(n=>`<option ${teamObj[n]?'':''}>${esc(n)}</option>`).join("")}</select></div>
       <div><label>Objectif d'encaissement (FCFA)</label><input type="number" min="0" id="mob-val" placeholder="ex. 1500000"></div>
@@ -3944,15 +4016,15 @@ function vMarketing(){
 
   ${can("marketing")?`<div class="panel" style="border-left:4px solid var(--terra)">
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:4px">
-      <h3 style="margin:0">📣 Centre de communication ${FB.ok?'<span class="badge ok" style="font-size:10px">portail connecté</span>':'<span class="badge alert" style="font-size:10px">portail hors-ligne</span>'}</h3>
+      <h3 style="margin:0">Centre de communication ${FB.ok?'<span class="badge ok" style="font-size:10px">portail connecté</span>':'<span class="badge alert" style="font-size:10px">portail hors-ligne</span>'}</h3>
     </div>
     <p class="muted" style="margin-bottom:12px">Publiez des <b>affiches promo</b> et des <b>notes d'information</b> qui s'affichent en temps réel sur le portail de vos clients.</p>
     <div class="grid2">
       <div><label>Type</label><select id="an-type">
-        <option value="promo" ${ea&&ea.type==="promo"?"selected":""}>🎉 Promotion / offre</option>
-        <option value="info" ${ea&&ea.type==="info"?"selected":""}>ℹ️ Note d'information</option>
-        <option value="alert" ${ea&&ea.type==="alert"?"selected":""}>⚠️ Alerte / urgent</option>
-        <option value="event" ${ea&&ea.type==="event"?"selected":""}>📅 Événement / fête</option>
+        <option value="promo" ${ea&&ea.type==="promo"?"selected":""}>Promotion / offre</option>
+        <option value="info" ${ea&&ea.type==="info"?"selected":""}>Note d'information</option>
+        <option value="alert" ${ea&&ea.type==="alert"?"selected":""}>Alerte / urgent</option>
+        <option value="event" ${ea&&ea.type==="event"?"selected":""}>Événement / fête</option>
       </select></div>
       <div><label>Couleur d'accent</label><select id="an-color">
         ${[["terra","Terracotta"],["bleu","Bleu nuit"],["vert","Vert"],["rouge","Rouge"]].map(([v,l])=>`<option value="${v}" ${ea&&ea.color===v?"selected":""}>${l}</option>`).join("")}
@@ -3965,7 +4037,7 @@ function vMarketing(){
       <div><label>Date d'expiration (optionnel)</label><input id="an-expire" type="date" value="${ea?ea.expire||"":""}"></div>
     </div>
     <div class="row" style="margin-top:10px">
-      <button class="btn" id="an-save">${ea?"Enregistrer les modifications":"📤 Publier sur le portail"}</button>
+      <button class="btn" id="an-save">${ea?"Enregistrer les modifications":"Publier sur le portail"}</button>
       ${ea?'<button class="btn ghost" id="an-cancel">Annuler</button>':""}
       <button class="btn ghost" id="an-preview">Aperçu</button>
     </div>
@@ -3987,7 +4059,7 @@ function vMarketing(){
   </div>
 
   <div class="panel" style="border-left:4px solid var(--vert)">
-    <h3 style="margin-bottom:4px">🏷️ Promotions & réductions de prix</h3>
+    <h3 style="margin-bottom:4px">Promotions & réductions de prix</h3>
     <p class="muted" style="margin-bottom:12px">Appliquez une réduction sur un produit ou une famille entière. Le prix barré et le prix promo s'affichent sur le portail (comme Jumia).</p>
     <div class="grid2">
       <div><label>Cible</label><select id="pr-target">
@@ -4050,7 +4122,7 @@ function vMarketing(){
       </ul></div>
   </div>`;
 }
-function annTypeIcon(t){ return {promo:"🎉",info:"ℹ️",alert:"⚠️",event:"📅"}[t]||"📣"; }
+function annTypeIcon(t){ return {promo:"",info:"",alert:"",event:""}[t]||""; }
 function annTypeLabel(t){ return {promo:"Promotion",info:"Information",alert:"Alerte",event:"Événement"}[t]||"Annonce"; }
 function annPreviewHTML(a){
   const colors={terra:"#C85E2D",bleu:"#0F2A4A",vert:"#2E6B3E",rouge:"#A33B3B"};
@@ -4141,8 +4213,7 @@ function normalizeFamily(s){
     "écologique":"Écologique","ecologique":"Écologique","éco":"Écologique","bio":"Écologique",
     "informatique":"Consommables informatiques","consommables informatiques":"Consommables informatiques","info":"Consommables informatiques",
     "matériel de bureau":"Matériel de bureau","materiel de bureau":"Matériel de bureau","bureau":"Matériel de bureau","fourniture":"Matériel de bureau",
-    "mobilier":"Mobilier de bureau","mobilier de bureau":"Mobilier de bureau"
-  };
+    "mobilier":"Mobilier de bureau","mobilier de bureau":"Mobilier de bureau" };
   if(map[x]) return map[x];
   // correspondance partielle
   for(const k in map){ if(x && (x.includes(k)||k.includes(x))) return map[k]; }
@@ -4374,7 +4445,7 @@ function bindLogin(){
     if(h!==u.hash) return toast("Mot de passe incorrect");
     session = { userId:u.id };
     log("Connexion");
-    await save(); await saveSession(); tab="dash"; render(); toast("Bonjour "+u.name+" 👋");
+    await save(); await saveSession(); tab="dash"; render(); toast("Bonjour "+u.name+" ");
   };
   el("lg-go").onclick = go;
   el("lg-pass").onkeydown = e=>{ if(e.key==="Enter") go(); };
@@ -4431,6 +4502,32 @@ function bindApp(){
   document.querySelectorAll("[data-webquote]").forEach(b=> b.onclick = async ()=>{
     if(FB.updateDoc) await FB.updateDoc("portal_quotes", b.dataset.webquote, { status:"resolved" });
     toast("Cotation marquée vue ✓");
+  });
+  // ===== Demandes de devis (portail) → pré-remplissage de l'éditeur de devis =====
+  document.querySelectorAll("[data-webdevis]").forEach(b=> b.onclick = async ()=>{
+    const dv = webDevis.find(d=>d._id===b.dataset.webdevis); if(!dv) return;
+    // 1) trouver, sinon créer, le client (marqué prospect tant qu'il n'a pas commandé)
+    let cli = S.clients.find(c=> (dv.client_email && c.email && c.email.toLowerCase()===String(dv.client_email).toLowerCase()) || c.name===dv.client_name );
+    const dvPhoneLocal = (dv.client_phone||"").replace(/^\+?221/,"").replace(/[^\d]/g,"");
+    if(!cli){
+      cli = { id:nid(), matricule:nextMatricule(), name:dv.client_name||"Client web", type:"Boutique / revendeur", zone:dv.zone||"", dial:"+221", local:dvPhoneLocal, phone:(dv.client_phone||""), email:(dv.client_email||""), points:0, tier:"detail", remise:0, customPrices:{}, prospect:true, created:today(), source:"portail" };
+      S.clients.push(cli);
+    }
+    // 2) pré-remplir les lignes du devis avec les articles demandés (au tarif du client)
+    const lines = (dv.items||[]).map(it=>{ const prod=S.products.find(p=>p.name===it.name); return prod?{ productId:prod.id, qty:it.qty||1, price:clientPrice(prod, cli) }:null; }).filter(Boolean);
+    const matched=lines.length, asked=(dv.items||[]).length;
+    quoteDraft = { clientId:cli.id, date:today(), validity:(()=>{const d=new Date();d.setDate(d.getDate()+30);return d.toISOString().slice(0,10);})(), lines, tvaApplicable:true, webDevisRef:dv.ref };
+    log("Devis préparé depuis demande portail : "+dv.ref);
+    await save();
+    if(FB.updateDoc) await FB.updateDoc("portal_devis", dv._id, { status:"processed", processedAt:Date.now() });
+    toast(matched<asked ? ("Devis pré-rempli — "+matched+"/"+asked+" article(s) reconnu(s)") : ("Devis pré-rempli depuis "+dv.ref+" ✓"));
+    tab="quotes"; render();
+  });
+  document.querySelectorAll("[data-webdevisx]").forEach(b=> b.onclick = async ()=>{
+    const dv = webDevis.find(d=>d._id===b.dataset.webdevisx); if(!dv) return;
+    if(!confirm("Refuser la demande de devis "+dv.ref+" ?")) return;
+    if(FB.updateDoc) await FB.updateDoc("portal_devis", dv._id, { status:"cancelled" });
+    toast("Demande de devis refusée");
   });
 
   // Recherche globale (en-tête, style NetSuite)
@@ -4518,7 +4615,7 @@ function bindApp(){
     const dial = el("c-dial").value;
     const local = normPhone(dial, el("c-local").value);
     if(!local) return toast("Le numéro de téléphone est obligatoire");
-    if(phoneExists(dial, local, editClientId)) return toast("⚠ Ce numéro de téléphone existe déjà pour un autre client");
+    if(phoneExists(dial, local, editClientId)) return toast("Ce numéro de téléphone existe déjà pour un autre client");
     if(editClientId){
       const c = S.clients.find(c=>c.id===editClientId);
       c.name=name; c.type=el("c-type").value; c.zone=el("c-zone").value.trim(); c.dial=dial; c.local=local; c.phone=dial+" "+local;
@@ -4535,7 +4632,7 @@ function bindApp(){
   document.querySelectorAll("[data-prospect]").forEach(b=> b.onclick = async ()=>{
     let p; try{ p=JSON.parse(b.dataset.prospect); }catch(e){ return; }
     const local = (p.phone||"").replace(/^\+?221/,"").replace(/[^\d]/g,"");
-    if(local && phoneExists("+221", local, null)) return toast("⚠ Ce téléphone existe déjà dans la base");
+    if(local && phoneExists("+221", local, null)) return toast("Ce téléphone existe déjà dans la base");
     S.clients.push({ id:nid(), matricule:nextMatricule(), name:p.name||"Client", type:p.type||"Boutique / revendeur", zone:p.zone||"", dial:"+221", local, phone:p.phone||"", email:p.email||"", points:0, created:today(), source:"portail" });
     log("Prospect ajouté à la base : "+(p.name||""));
     await save(); render(); toast("Client ajouté à la base ✓");
@@ -4573,7 +4670,7 @@ function bindApp(){
       const editingDelivered = editOrder && editOrder.delivered;
       if(!editingDelivered){
         for(const l of draft.lines){ const p=S.products.find(p=>p.id===l.productId);
-          if(p && l.qty>p.stock){ return toast("⛔ "+p.name+" : seulement "+p.stock+" en stock. Réduisez la quantité ou réapprovisionnez."); } }
+          if(p && l.qty>p.stock){ return toast(""+p.name+" : seulement "+p.stock+" en stock. Réduisez la quantité ou réapprovisionnez."); } }
       }
       // Validation échéance crédit (max 3 mois)
       let dueDate = null;
@@ -4702,7 +4799,7 @@ function bindApp(){
     if(!o||!p) return;
     openModal(`<div class="row" style="justify-content:space-between"><h3>Reçu de paiement</h3><button class="x" onclick="closeModal()">×</button></div>
       <div style="border:1px solid #eee;border-radius:8px;padding:10px">${paymentReceiptHTML(o,p)}</div>
-      <div class="row" style="margin-top:12px"><button class="btn b" id="rc-pdf">⬇ Télécharger PDF</button><button class="btn ghost" id="rc-print">Imprimer</button><button class="btn ghost" onclick="closeModal()">Fermer</button></div>`);
+      <div class="row" style="margin-top:12px"><button class="btn b" id="rc-pdf">Télécharger PDF</button><button class="btn ghost" id="rc-print">Imprimer</button><button class="btn ghost" onclick="closeModal()">Fermer</button></div>`);
     el("rc-print").onclick = ()=> printHTML(paymentReceiptHTML(o,p));
     el("rc-pdf").onclick = ()=> downloadReceiptPDF(o,p);
   });
@@ -4711,7 +4808,7 @@ function bindApp(){
     const e=S.expenses.find(e=>e.id===+b.dataset.ereceipt); if(!e) return;
     openModal(`<div class="row" style="justify-content:space-between"><h3>Pièce de dépense</h3><button class="x" onclick="closeModal()">×</button></div>
       <div style="border:1px solid #eee;border-radius:8px;padding:10px">${expenseReceiptHTML(e)}</div>
-      <div class="row" style="margin-top:12px"><button class="btn b" id="rc-pdf">⬇ Télécharger PDF</button><button class="btn ghost" id="rc-print">Imprimer</button><button class="btn ghost" onclick="closeModal()">Fermer</button></div>`);
+      <div class="row" style="margin-top:12px"><button class="btn b" id="rc-pdf">Télécharger PDF</button><button class="btn ghost" id="rc-print">Imprimer</button><button class="btn ghost" onclick="closeModal()">Fermer</button></div>`);
     el("rc-print").onclick = ()=> printHTML(expenseReceiptHTML(e));
     el("rc-pdf").onclick = ()=> downloadExpensePDF(e);
   });
@@ -4792,17 +4889,50 @@ function bindApp(){
     if(!confirm("Supprimer ce fournisseur ?")) return;
     S.suppliers=S.suppliers.filter(s=>s.id!==id); log("Fournisseur supprimé"); await save(); render();
   });
+  // ===== Vague 5 — saisie d'achat avec lignes produit & réception stock =====
+  const PD = purchaseDraft || (purchaseDraft = freshPurchaseDraft());
+  const syncPU=()=>{ if(el("pu-sup")) PD.supplierId=+el("pu-sup").value; if(el("pu-ref")) PD.ref=el("pu-ref").value; if(el("pu-date")) PD.date=el("pu-date").value; if(el("pu-status")) PD.status=el("pu-status").value; if(el("pu-amount")) PD.amount=+el("pu-amount").value||0; };
+  ["pu-sup","pu-ref","pu-date","pu-status","pu-amount"].forEach(id=>{ const e=el(id); if(e) e.onchange=syncPU; });
+  const puAddLine=el("pu-addline");
+  if(puAddLine) puAddLine.onclick=()=>{ syncPU(); const p=S.products[0]; PD.lines.push({ productId:p?p.id:null, qty:1, cost:p?(+p.cost||0):0 }); render(); };
+  document.querySelectorAll("[data-pl-prod]").forEach(sel=> sel.onchange=()=>{ syncPU(); const i=+sel.dataset.plProd; PD.lines[i].productId=+sel.value; const prod=S.products.find(x=>x.id===+sel.value); if(prod && !(+PD.lines[i].cost>0)) PD.lines[i].cost=+prod.cost||0; render(); });
+  document.querySelectorAll("[data-pl-qty]").forEach(inp=> inp.onchange=()=>{ syncPU(); PD.lines[+inp.dataset.plQty].qty=Math.max(1,+inp.value||1); render(); });
+  document.querySelectorAll("[data-pl-cost]").forEach(inp=> inp.onchange=()=>{ syncPU(); PD.lines[+inp.dataset.plCost].cost=Math.max(0,+inp.value||0); render(); });
+  document.querySelectorAll("[data-pl-del]").forEach(b=> b.onclick=()=>{ syncPU(); PD.lines.splice(+b.dataset.plDel,1); render(); });
   const puAdd = el("pu-add");
   if(puAdd) puAdd.onclick = async ()=>{
-    const sid=+el("pu-sup").value, ref=el("pu-ref").value.trim(), amount=+el("pu-amount").value;
-    if(!sid||!amount) return toast("Fournisseur et montant requis");
+    syncPU();
+    const sid=PD.supplierId, ref=(PD.ref||"").trim(), lines=(PD.lines||[]).filter(l=>l.productId&&(+l.qty>0));
+    const linesSub=lines.reduce((a,l)=>a+(+l.qty||0)*(+l.cost||0),0);
+    const amount = (+PD.amount>0) ? +PD.amount : linesSub;
+    if(!sid || (!amount && !lines.length)) return toast("Fournisseur et montant (ou lignes produit) requis");
     const num = "ACH-"+String(S.poSeq++).padStart(4,"0");
-    S.purchases.push({ id:nid(), num, supplierId:sid, ref, amount, status:el("pu-status")?el("pu-status").value:"Commandé", date:el("pu-date").value||today(), by:me().name });
-    log("Achat enregistré : "+num+" — "+fmt(amount));
-    await save(); render(); toast("Achat "+num+" enregistré ✓");
+    const purchase = { id:nid(), num, supplierId:sid, ref, amount, status:PD.status||"Commandé", date:PD.date||today(), by:me().name, lines:lines.map(l=>({productId:l.productId, qty:+l.qty, cost:+l.cost||0})), received:false, stockApplied:false };
+    let added=0;
+    if(purchase.status==="Reçu" && purchase.lines.length) added=applyPurchaseStock(purchase);
+    S.purchases.push(purchase);
+    log("Achat enregistré : "+num+" — "+fmt(amount)+(purchase.lines.length?(" · "+purchase.lines.length+" ligne(s)"):""));
+    purchaseDraft = freshPurchaseDraft();
+    await save(); render();
+    toast(added? ("Achat "+num+" — +"+added+" unité(s) en stock ✓") : ("Achat "+num+" enregistré ✓"));
   };
   document.querySelectorAll("[data-pustatus]").forEach(sel=> sel.onchange = async ()=>{
-    const p=S.purchases.find(p=>p.id===+sel.dataset.pustatus); if(p){ p.status=sel.value; log("Achat "+p.num+" : "+sel.value); await save(); render(); }
+    const p=S.purchases.find(p=>p.id===+sel.dataset.pustatus); if(!p) return;
+    p.status=sel.value;
+    let added=0;
+    if(sel.value==="Reçu" && Array.isArray(p.lines) && p.lines.length && !p.stockApplied) added=applyPurchaseStock(p);
+    log("Achat "+p.num+" : "+sel.value);
+    await save(); render();
+    if(added) toast("Réception "+p.num+" : +"+added+" unité(s) en stock ✓");
+  });
+  document.querySelectorAll("[data-rcvpu]").forEach(b=> b.onclick = async ()=>{
+    const p=S.purchases.find(p=>p.id===+b.dataset.rcvpu); if(!p) return;
+    if(!Array.isArray(p.lines)||!p.lines.length||p.stockApplied) return;
+    if(!confirm("Réceptionner « "+p.num+" » et ajouter "+p.lines.reduce((a,l)=>a+(+l.qty||0),0)+" unité(s) au stock ?")) return;
+    const added=applyPurchaseStock(p);
+    log("Réception marchandise : "+p.num+" — +"+added+" unité(s)");
+    await save(); render();
+    toast("Stock reçu : +"+added+" unité(s) ✓");
   });
   document.querySelectorAll("[data-delpu]").forEach(b=> b.onclick = async ()=>{
     if(!confirm("Supprimer cet achat ?")) return;
@@ -4904,7 +5034,7 @@ function bindApp(){
       S.announcements.push(a); log("Annonce publiée : "+d.title);
       // Publier dans la collection portail (lisible par les clients)
       if(FB.ok && FB.setDoc) await FB.setDoc("portal_announcements", String(a.id), a);
-      await save(); render(); toast(FB.ok?"📤 Annonce publiée sur le portail ✓":"Annonce enregistrée (portail hors-ligne)");
+      await save(); render(); toast(FB.ok?"Annonce publiée sur le portail ✓":"Annonce enregistrée (portail hors-ligne)");
     }
   };
   const anCancel = el("an-cancel"); if(anCancel) anCancel.onclick = ()=>{ editAnnId=null; render(); };
@@ -5015,6 +5145,8 @@ function bindApp(){
   const coLogoRm = el("co-logo-remove");
   if(coLogoRm) coLogoRm.onclick = ()=>{ pendingLogo=""; const prev=el("co-logo-preview"); if(prev) prev.innerHTML='<span style="color:#bbb;font-size:22px">D</span>'; toast("Logo retiré — cliquez sur Enregistrer"); };
   const coSave = el("co-save");
+  const pubCat = el("pub-catalog");
+  if(pubCat) pubCat.onclick = async ()=>{ await publishPublicCatalog(); toast("Catalogue public publié ✓ — le portail n'expose plus le blob complet"); };
   if(coSave) coSave.onclick = async ()=>{
     S.settings = S.settings || {}; S.settings.company = S.settings.company || {};
     const c = S.settings.company;
