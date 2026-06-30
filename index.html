@@ -4516,10 +4516,10 @@ function bindApp(){
     // 2) pré-remplir les lignes du devis avec les articles demandés (au tarif du client)
     const lines = (dv.items||[]).map(it=>{ const prod=S.products.find(p=>p.name===it.name); return prod?{ productId:prod.id, qty:it.qty||1, price:clientPrice(prod, cli) }:null; }).filter(Boolean);
     const matched=lines.length, asked=(dv.items||[]).length;
-    quoteDraft = { clientId:cli.id, date:today(), validity:(()=>{const d=new Date();d.setDate(d.getDate()+30);return d.toISOString().slice(0,10);})(), lines, tvaApplicable:true, webDevisRef:dv.ref };
+    quoteDraft = { clientId:cli.id, date:today(), validity:(()=>{const d=new Date();d.setDate(d.getDate()+30);return d.toISOString().slice(0,10);})(), lines, tvaApplicable:true, webDevisRef:dv.ref, webDevisId:dv._id };
     log("Devis préparé depuis demande portail : "+dv.ref);
     await save();
-    if(FB.updateDoc) await FB.updateDoc("portal_devis", dv._id, { status:"processed", processedAt:Date.now() });
+    // NE PAS marquer processed ici — ce sera fait à l'enregistrement du devis avec les données complètes
     toast(matched<asked ? ("Devis pré-rempli — "+matched+"/"+asked+" article(s) reconnu(s)") : ("Devis pré-rempli depuis "+dv.ref+" ✓"));
     tab="quotes"; render();
   });
@@ -4716,9 +4716,26 @@ function bindApp(){
     const qs=el("q-save"); if(qs) qs.onclick=async ()=>{
       if(!quoteDraft.lines.length) return;
       const num="DEV-"+String(S.quoteSeq++).padStart(4,"0");
-      S.quotes.push({ id:nid(), num, date:quoteDraft.date, validity:quoteDraft.validity, clientId:quoteDraft.clientId, lines:quoteDraft.lines.map(l=>({...l})), tvaApplicable:quoteDraft.tvaApplicable!==false, status:"en attente", createdBy:me().name });
-      log("Devis créé : "+num+" — "+clientName(quoteDraft.clientId)+" ("+fmt(quoteTotal(quoteDraft))+")");
+      const newQ={ id:nid(), num, date:quoteDraft.date, validity:quoteDraft.validity, clientId:quoteDraft.clientId, lines:quoteDraft.lines.map(l=>({...l})), tvaApplicable:quoteDraft.tvaApplicable!==false, status:"en attente", createdBy:me().name };
+      S.quotes.push(newQ);
+      log("Devis créé : "+num+" — "+clientName(quoteDraft.clientId)+" ("+fmt(quoteTotal(newQ))+")");
+      // Capturer les infos portail AVANT de nullifier quoteDraft
+      const webRef = quoteDraft.webDevisRef;
+      const webId  = quoteDraft.webDevisId;
       quoteDraft=null; await save(); render(); toast("Devis "+num+" enregistré ✓");
+      // Rétroécriture dans portal_devis (données complètes pour PDF côté client)
+      if(webId && FB.updateDoc){
+        const cli=S.clients.find(c=>c.id===newQ.clientId)||{};
+        const ttc=quoteTotal(newQ), tva=quoteTVA(newQ);
+        const linesSummary=newQ.lines.map(l=>({name:prodName(l.productId)||l.name||"", qty:l.qty, price:l.price}));
+        await FB.updateDoc("portal_devis", webId, {
+          localQuoteNum:num, status:"processed", processedAt:Date.now(),
+          quoteDate:newQ.date, quoteValidity:newQ.validity, quoteTva:newQ.tvaApplicable,
+          quoteLines:linesSummary, quoteTotal:ttc, quoteTvaAmt:tva,
+          quoteClientName:cli.name||""
+        });
+        toast("Devis "+num+" transmis au client ✓");
+      }
     };
   }
   document.querySelectorAll("[data-qpdf]").forEach(b=> b.onclick=()=>{ const q=S.quotes.find(x=>x.id===+b.dataset.qpdf); if(q) downloadQuotePDF(q); });
